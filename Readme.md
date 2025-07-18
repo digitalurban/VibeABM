@@ -1,12 +1,12 @@
-# A Collection of Vibe Coded Agent-Based Model Simulations
+# A Collection of Agent-Based Model Simulations
 
-This repository hosts a series of interactive web-based simulations exploring different forms of Agent-Based Models (ABMs) using Vibe Coding. Each simulation is self-contained in a single HTML file and uses JavaScript and Three.js to render dynamic systems where autonomous agents interact with each other and their environment based on a set of rules.
+This repository hosts a series of interactive web-based simulations exploring different forms of Agent-Based Models (ABMs). Each simulation is self-contained in a single HTML file and uses JavaScript and Three.js to render dynamic systems where autonomous agents interact with each other and their environment based on a set of rules.
 
 ---
 
-### 1. Procedural City & Multi-Agent System (Gemini 2.5 Pro)
+### 1. Procedural City & Multi-Agent System
 
-**✨ [View Live Demo: `procedural-city.html`](https://digitalurban.github.io/VibeABM/procedural-city.html)**
+**✨ [View Live Demo: `proceduralcity.html`](https://digitalurban.github.io/VibeABM/proceduralcity.html)**
 
 This simulation generates a complete 3D city procedurally and populates it with several types of autonomous agents, each exhibiting distinct behaviors.
 
@@ -22,9 +22,9 @@ This simulation generates a complete 3D city procedurally and populates it with 
 
 ---
 
-### 2. Asteroid Clock - Reactive Agents (Gemini 2.5 Pro)
+### 2. Asteroid Clock - Reactive Agents
 
-**✨ [View Live Demo: `asteroid-clock.html`](https://digitalurban.github.io/VibeABM/asteroid-clock.html)**
+**✨ [View Live Demo: `asteroidsclock.html`](https://digitalurban.github.io/VibeABM/asteroidsclock.html)**
 
 This project reinterprets the classic arcade game *Asteroids* as a generative agent-based model that visualizes the current time. The simulation resets every minute, creating a perpetual, self-playing game.
 
@@ -38,9 +38,9 @@ This project reinterprets the classic arcade game *Asteroids* as a generative ag
 
 ---
 
-### 3. Grand Hall - Crowd & Egress Simulation (Gemini 2.5 Pro)
+### 3. Grand Hall - Crowd & Egress Simulation
 
-**✨ [View Live Demo: `agent-simulation.html`](https://digitalurban.github.io/VibeABM/agent-simulation.html)**
+**✨ [View Live Demo: `agentsllm.html`](https://digitalurban.github.io/VibeABM/agentsllm.html)**
 
 This is a large-scale crowd simulation demonstrating how hundreds of agents navigate a complex indoor environment to reach a designated exit. The paths the agents take are visualized as colored trails on the floor.
 
