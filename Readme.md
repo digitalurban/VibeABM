@@ -6,6 +6,8 @@ This repository hosts a series of interactive web-based simulations exploring di
 
 ### 1. Procedural City & Multi-Agent System (Created with Gemini 2.5 Pro)
 
+![Procedural City Demo](https://raw.githubusercontent.com/digitalurban/VibeABM/main/procedural.png)
+
 **✨ [View Live Demo: `proceduralcity.html`](https://digitalurban.github.io/VibeABM/proceduralcity.html)**
 
 This simulation generates a complete 3D city procedurally and populates it with several types of autonomous agents, each exhibiting distinct behaviors.
@@ -24,6 +26,8 @@ This simulation generates a complete 3D city procedurally and populates it with 
 
 ### 2. Asteroid Clock - Reactive Agents (Created with Gemini 2.5 Pro)
 
+![Asteroid Clock Demo](https://raw.githubusercontent.com/digitalurban/VibeABM/main/asteroids.png)
+
 **✨ [View Live Demo: `asteroidsclock.html`](https://digitalurban.github.io/VibeABM/asteroidsclock.html)**
 
 This project reinterprets the classic arcade game *Asteroids* as a generative agent-based model that visualizes the current time. The simulation resets every minute, creating a perpetual, self-playing game.
@@ -39,6 +43,8 @@ This project reinterprets the classic arcade game *Asteroids* as a generative ag
 ---
 
 ### 3. Grand Hall - Crowd & Egress Simulation (Created with Gemini 2.5 Pro)
+
+![Grand Hall Demo](https://raw.githubusercontent.com/digitalurban/VibeABM/main/grandhall.png)
 
 **✨ [View Live Demo: `agentsllm.html`](https://digitalurban.github.io/VibeABM/agent-simulation.html)**
 
