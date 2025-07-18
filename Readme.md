@@ -40,7 +40,7 @@ This project reinterprets the classic arcade game *Asteroids* as a generative ag
 
 ### 3. Grand Hall - Crowd & Egress Simulation (Created with Gemini 2.5 Pro)
 
-**✨ [View Live Demo: `agentsllm.html`](https://digitalurban.github.io/VibeABM/agentsllm.html)**
+**✨ [View Live Demo: `agentsllm.html`](https://digitalurban.github.io/VibeABM/agent-simulation.html)**
 
 This is a large-scale crowd simulation demonstrating how hundreds of agents navigate a complex indoor environment to reach a designated exit. The paths the agents take are visualized as colored trails on the floor.
 
