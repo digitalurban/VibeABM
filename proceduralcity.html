@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural 3D City with Boids Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111827; color: #fff; }
+        canvas { display: block; }
+        #ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 15px;
+            width: 320px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 1.6em;
+            color: #f3f4f6;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: linear-gradient(45deg, #f97316, #ea580c);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
+            margin-bottom: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5);
+        }
+        .secondary-button {
+             background: linear-gradient(45deg, #3b82f6, #2563eb);
+             box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+         .secondary-button:hover {
+             box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+        }
+        .input-group {
+            margin-top: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            color: #d1d5db;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background-color: rgba(31, 41, 55, 0.8);
+            color: #fff;
+            font-size: 1em;
+            box-sizing: border-box; /* Important for padding */
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Physics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+</head>
+<body>
+    <div id="ui-panel">
+        <h1>Procedural City</h1>
+        <button id="generate-btn">Generate New City</button>
+        <button id="drop-casa-cubes-btn" class="secondary-button">Drop CASA Cubes</button>
+        <div class="input-group">
+            <label for="cube-count">Number of Cubes:</label>
+            <input type="number" id="cube-count" value="64" min="1" max="100">
+        </div>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Scene Globals ---
+        let scene, camera, renderer, controls, clock, world;
+        const cityGroup = new THREE.Group();
+        const trafficGroup = new THREE.Group();
+        const pedestrianGroup = new THREE.Group();
+        const cloudsGroup = new THREE.Group();
+        const birdsGroup = new THREE.Group();
+        let cars = [];
+        let trafficLights = [];
+        let pedestrians = [];
+        let physicsObjects = [];
+        let clouds = [];
+        let boids = []; // CHANGED: from birds to boids
+
+        // --- City Configuration ---
+        const citySize = 10;
+        const blockSize = 20;
+        const roadWidth = 8;
+        const totalBlockSize = blockSize + roadWidth;
+        const cityOffset = - (citySize * totalBlockSize) / 2;
+
+        // --- Materials ---
+        const roadMat = new THREE.MeshLambertMaterial({ color: 0x34495e });
+        const yellowLineMat = new THREE.MeshBasicMaterial({ color: 0xf1c40f });
+        const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const pavementMat = new THREE.MeshStandardMaterial({ color: 0x95a5a6 });
+        const curbMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, transparent: true, opacity: 0.8 });
+        const birdMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.2, roughness: 0.8 }); // CHANGED: Material for better visibility
+
+        // --- Cube Material Setup ---
+        const logoTexture = new THREE.TextureLoader().load('https://finchamweather.co.uk/casa_logo.jpg');
+        logoTexture.anisotropy = 16;
+        const cubeMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+             map: logoTexture,
+            metalness: 0.1,
+            roughness: 0.8
+        });
+
+        const greenLightOnMat = new THREE.MeshStandardMaterial({ emissive: '#2ecc71', emissiveIntensity: 2 });
+        const greenLightOffMat = new THREE.MeshStandardMaterial({ color: '#2ecc71', emissiveIntensity: 0.1 });
+        const redLightOnMat = new THREE.MeshStandardMaterial({ emissive: '#e74c3c', emissiveIntensity: 2 });
+        const redLightOffMat = new THREE.MeshStandardMaterial({ color: '#e74c3c', emissiveIntensity: 0.1 });
+
+        // --- Physics Materials ---
+        const worldPhysicsMaterial = new CANNON.Material('world');
+        const cubePhysicsMaterial = new CANNON.Material('cube');
+        const cubeWorldContactMaterial = new CANNON.ContactMaterial(
+            worldPhysicsMaterial,
+            cubePhysicsMaterial,
+            {
+                friction: 0.1,
+                restitution: 0.9
+            }
+        );
+
+        // --- BOIDS CONFIGURATION ---
+        const BOID_COUNT = 80;
+        const BOID_BOUNDS = citySize * totalBlockSize / 2;
+        const MAX_SPEED = 0.5;
+        const MAX_FORCE = 0.03;
+        const PERCEPTION_RADIUS = 20;
+
+        // --- NEW: Boid Class ---
+        class Boid {
+            constructor() {
+                this.position = new THREE.Vector3(
+                    (Math.random() - 0.5) * BOID_BOUNDS,
+                    60 + Math.random() * 40,
+                    (Math.random() - 0.5) * BOID_BOUNDS
+                );
+                this.velocity = new THREE.Vector3().randomDirection().multiplyScalar(Math.random() * MAX_SPEED);
+                this.acceleration = new THREE.Vector3();
+                
+                const geometry = new THREE.ConeGeometry(0.3, 1.2, 4);
+                this.mesh = new THREE.Mesh(geometry, birdMat);
+                this.mesh.position.copy(this.position);
+                birdsGroup.add(this.mesh);
+            }
+
+            // Rule 1: Separation
+            separation(boids) {
+                let steering = new THREE.Vector3();
+                let total = 0;
+                for (let other of boids) {
+                    let d = this.position.distanceTo(other.position);
+                    if (other !== this && d < PERCEPTION_RADIUS / 2) {
+                        let diff = new THREE.Vector3().subVectors(this.position, other.position);
+                        diff.divideScalar(d * d); // Weight by distance
+                        steering.add(diff);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.setLength(MAX_SPEED);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, MAX_FORCE);
+                }
+                return steering;
+            }
+
+            // Rule 2: Alignment
+            alignment(boids) {
+                let steering = new THREE.Vector3();
+                let total = 0;
+                for (let other of boids) {
+                    let d = this.position.distanceTo(other.position);
+                    if (other !== this && d < PERCEPTION_RADIUS) {
+                        steering.add(other.velocity);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.setLength(MAX_SPEED);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, MAX_FORCE);
+                }
+                return steering;
+            }
+
+            // Rule 3: Cohesion
+            cohesion(boids) {
+                let steering = new THREE.Vector3();
+                let total = 0;
+                for (let other of boids) {
+                    let d = this.position.distanceTo(other.position);
+                    if (other !== this && d < PERCEPTION_RADIUS) {
+                        steering.add(other.position);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.sub(this.position);
+                    steering.setLength(MAX_SPEED);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, MAX_FORCE);
+                }
+                return steering;
+            }
+            
+            // Keep boids within bounds
+            bounds() {
+                const turnForce = 0.1;
+                let steering = new THREE.Vector3();
+                if (this.position.x > BOID_BOUNDS) steering.x = -turnForce;
+                else if (this.position.x < -BOID_BOUNDS) steering.x = turnForce;
+                if (this.position.y > 120) steering.y = -turnForce;
+                else if (this.position.y < 40) steering.y = turnForce;
+                if (this.position.z > BOID_BOUNDS) steering.z = -turnForce;
+                else if (this.position.z < -BOID_BOUNDS) steering.z = turnForce;
+                return steering;
+            }
+
+            flock(boids) {
+                this.acceleration.set(0, 0, 0);
+                let alignment = this.alignment(boids);
+                let cohesion = this.cohesion(boids);
+                let separation = this.separation(boids);
+                let bounds = this.bounds();
+
+                // Apply forces with weights
+                this.acceleration.add(alignment.multiplyScalar(1.0));
+                this.acceleration.add(cohesion.multiplyScalar(1.0));
+                this.acceleration.add(separation.multiplyScalar(1.5));
+                this.acceleration.add(bounds.multiplyScalar(2.0));
+            }
+
+            update() {
+                this.velocity.add(this.acceleration);
+                this.velocity.clampLength(0, MAX_SPEED);
+                this.position.add(this.velocity);
+
+                this.mesh.position.copy(this.position);
+                // Point the cone in the direction of velocity
+                this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.velocity.clone().normalize());
+            }
+        }
+
+        function init() {
+            // --- Basic Scene Setup ---
+            clock = new THREE.Clock();
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1d2a3b);
+            scene.fog = new THREE.Fog(0x1d2a3b, 150, 400);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(50, 80, 100);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // --- Physics World ---
+            world = new CANNON.World();
+            world.gravity.set(0, -5, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 10;
+            world.addContactMaterial(cubeWorldContactMaterial);
+
+            // --- Lighting ---
+            const ambientLight = new THREE.AmbientLight(0xcccccc, 0.8);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            directionalLight.position.set(-80, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 4096;
+            directionalLight.shadow.mapSize.height = 4096;
+            const shadowSize = citySize * blockSize * 1.5;
+            directionalLight.shadow.camera.left = -shadowSize;
+            directionalLight.shadow.camera.right = shadowSize;
+            directionalLight.shadow.camera.top = shadowSize;
+            directionalLight.shadow.camera.bottom = -shadowSize;
+            scene.add(directionalLight);
+
+            // --- Scene Groups ---
+            scene.add(cityGroup);
+            scene.add(trafficGroup);
+            scene.add(pedestrianGroup);
+            scene.add(cloudsGroup);
+            scene.add(birdsGroup);
+
+            generateCity();
+
+            // --- Event Listeners ---
+            window.addEventListener('resize', onWindowResize, false);
+            document.getElementById('generate-btn').addEventListener('click', generateCity);
+            document.getElementById('drop-casa-cubes-btn').addEventListener('click', dropCASA_Cubes);
+        }
+
+        function clearSceneGroup(group) {
+              while(group.children.length > 0) {
+                const object = group.children[0];
+                if(object.isMesh || object.isGroup) {
+                    if (object.geometry) object.geometry.dispose();
+                }
+                group.remove(object);
+            }
+        }
+
+        function generateCity() {
+            clearSceneGroup(cityGroup);
+            clearSceneGroup(trafficGroup);
+            clearSceneGroup(pedestrianGroup);
+            clearSceneGroup(cloudsGroup);
+            clearSceneGroup(birdsGroup);
+
+            [...physicsObjects].forEach(obj => {
+                scene.remove(obj.mesh);
+                if (obj.mesh.geometry) obj.mesh.geometry.dispose();
+                world.removeBody(obj.body);
+            });
+            physicsObjects = [];
+
+            while(world.bodies.length > 0){
+                world.removeBody(world.bodies[0]);
+            }
+
+            cars = [];
+            trafficLights = [];
+            pedestrians = [];
+            clouds = [];
+            boids = []; // CHANGED
+
+            const groundBody = new CANNON.Body({
+                 mass: 0,
+                 shape: new CANNON.Plane(),
+                material: worldPhysicsMaterial
+            });
+            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+            world.addBody(groundBody);
+
+            for (let i = 0; i <= citySize; i++) {
+                for (let j = 0; j <= citySize; j++) {
+                    const x = cityOffset + i * totalBlockSize;
+                    const z = cityOffset + j * totalBlockSize;
+
+                    if (i < citySize && j < citySize) createCityBlock(x, z, i, j);
+                    if (i < citySize) createRoadSegment(new THREE.Vector3(x - roadWidth/2, 0.01, z + blockSize/2), false, blockSize);
+                    if (j < citySize) createRoadSegment(new THREE.Vector3(x + blockSize/2, 0.01, z - roadWidth/2), true, blockSize);
+                    if (i < citySize && j < citySize) createIntersection(x, z, i, j);
+                }
+            }
+
+            generateTraffic();
+            generatePedestrians();
+            generateClouds();
+            generateBoids(); // CHANGED
+        }
+
+        function createCloud() {
+            const cloud = new THREE.Group();
+            const puffGeo = new THREE.SphereGeometry(5, 4, 4);
+
+            for (let i = 0; i < 5 + Math.random() * 5; i++) {
+                const puff = new THREE.Mesh(puffGeo, cloudMat);
+                puff.position.set(
+                    (Math.random() - 0.5) * 15,
+                    (Math.random() - 0.5) * 5,
+                    (Math.random() - 0.5) * 10
+                );
+                puff.scale.setScalar(0.8 + Math.random() * 0.4);
+                cloud.add(puff);
+            }
+            cloud.castShadow = true;
+            return cloud;
+        }
+
+        function generateClouds() {
+            const numClouds = 25;
+            const cityWidth = citySize * totalBlockSize;
+            for (let i = 0; i < numClouds; i++) {
+                const cloudMesh = createCloud();
+                cloudMesh.position.set(
+                    (Math.random() - 0.5) * cityWidth * 2,
+                    100 + Math.random() * 20,
+                    (Math.random() - 0.5) * cityWidth * 2
+                );
+                clouds.push({ mesh: cloudMesh, speed: 0.02 + Math.random() * 0.03 });
+                cloudsGroup.add(cloudMesh);
+            }
+        }
+
+        // --- REPLACED generateBirds with generateBoids ---
+        function generateBoids() {
+            for (let i = 0; i < BOID_COUNT; i++) {
+                boids.push(new Boid());
+            }
+        }
+
+        function createCityBlock(x, z, gridI, gridJ) {
+            const pavementGeo = new THREE.BoxGeometry(blockSize, 0.2, blockSize);
+            const pavement = new THREE.Mesh(pavementGeo, pavementMat);
+            pavement.position.set(x + blockSize/2, 0.1, z + blockSize/2);
+            pavement.receiveShadow = true;
+            cityGroup.add(pavement);
+            const curbGeo = new THREE.BoxGeometry(blockSize + 0.2, 0.25, blockSize + 0.2);
+            const curb = new THREE.Mesh(curbGeo, curbMat);
+            curb.position.set(x + blockSize/2, 0.08, z + blockSize/2);
+            curb.receiveShadow = true;
+            cityGroup.add(curb);
+
+            const buildingCount = Math.floor(2 + Math.random() * 4);
+            for(let i = 0; i < buildingCount; i++) {
+                createBuilding(x + (Math.random() * (blockSize - 6)) + 3, z + (Math.random() * (blockSize - 6)) + 3);
+            }
+
+            const treeCount = Math.floor(3 + Math.random() * 5);
+            for(let i = 0; i < treeCount; i++) {
+                createTree(x + (Math.random() * (blockSize - 2)) + 1, z + (Math.random() * (blockSize - 2)) + 1, 0.2);
+            }
+        }
+
+        function createBuilding(x, z) {
+            const height = 10 + Math.random() * 30;
+            const width = 5;
+            const depth = 5;
+
+            const buildingGeo = new THREE.BoxGeometry(width, height, depth);
+            const buildingMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.7,0.7,0.7).multiplyScalar(0.8 + Math.random()*0.2) });
+            const building = new THREE.Mesh(buildingGeo, buildingMat);
+            building.position.set(x, height/2 + 0.2, z);
+            building.castShadow = true;
+            cityGroup.add(building);
+
+            const buildingShape = new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2));
+            const buildingBody = new CANNON.Body({
+                 mass: 0,
+                 shape: buildingShape,
+                material: worldPhysicsMaterial
+            });
+            buildingBody.position.set(x, height/2 + 0.2, z);
+            world.addBody(buildingBody);
+        }
+
+        function dropCASA_Cubes() {
+            const countInput = document.getElementById('cube-count');
+            const count = parseInt(countInput.value);
+
+            if (isNaN(count) || count <= 0) {
+                console.error("Invalid number of cubes specified.");
+                return;
+            }
+
+            const gridDim = Math.ceil(Math.sqrt(count));
+            const cityWidth = citySize * totalBlockSize;
+            const spacing = cityWidth / (gridDim + 1);
+            let droppedCount = 0;
+
+            for (let i = 0; i < gridDim; i++) {
+                for (let j = 0; j < gridDim; j++) {
+                    if (droppedCount >= count) break;
+
+                    const cubeWidth = 4;
+                    const cubeHeight = 5;
+                    const cubeDepth = 4;
+                    const cubeGeo = new THREE.BoxGeometry(cubeWidth, cubeHeight, cubeDepth);
+                    const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+                    cubeMesh.castShadow = true;
+
+                    const cubeShape = new CANNON.Box(new CANNON.Vec3(cubeWidth/2, cubeHeight/2, cubeDepth/2));
+                    const cubeBody = new CANNON.Body({
+                        mass: 5,
+                        shape: cubeShape,
+                        material: cubePhysicsMaterial
+                    });
+
+                    const x = cityOffset + (i + 1) * spacing;
+                    const z = cityOffset + (j + 1) * spacing;
+                    cubeBody.position.set(x, 150, z);
+                    cubeMesh.position.copy(cubeBody.position);
+
+                    world.addBody(cubeBody);
+                    scene.add(cubeMesh);
+                    physicsObjects.push({ mesh: cubeMesh, body: cubeBody });
+
+                    droppedCount++;
+                }
+                if (droppedCount >= count) break;
+            }
+        }
+
+        function generatePedestrians() {
+            const numPedestrians = 150;
+            for (let i = 0; i < numPedestrians; i++) {
+                const pedestrian = createPedestrian();
+                const startBlockI = Math.floor(Math.random() * citySize);
+                const startBlockJ = Math.floor(Math.random() * citySize);
+
+                const p = {
+                    mesh: pedestrian,
+                    speed: 0.03 + Math.random() * 0.02,
+                    target: new THREE.Vector3(),
+                    block: { i: startBlockI, j: startBlockJ }
+                };
+
+                const startPos = getNewTargetOnBlock(p.block);
+                pedestrian.position.copy(startPos);
+
+                setNewPedestrianTarget(p);
+                pedestrians.push(p);
+                pedestrianGroup.add(pedestrian);
+            }
+        }
+
+        function createPedestrian() {
+            const personColors = [0x3498db, 0x9b59b6, 0x1abc9c, 0xf39c12];
+            const personMat = new THREE.MeshStandardMaterial({ color: personColors[Math.floor(Math.random() * personColors.length)] });
+            const bodyGeo = new THREE.CylinderGeometry(0.2, 0.2, 1.2, 8);
+            const headGeo = new THREE.SphereGeometry(0.3, 8, 8);
+
+            const person = new THREE.Group();
+            const body = new THREE.Mesh(bodyGeo, personMat);
+            body.position.y = 0.6;
+            const head = new THREE.Mesh(headGeo, personMat);
+            head.position.y = 1.5;
+            person.add(body, head);
+            person.castShadow = true;
+            return person;
+        }
+
+        function getNewTargetOnBlock(block) {
+            const x = cityOffset + block.i * totalBlockSize + Math.random() * blockSize;
+            const z = cityOffset + block.j * totalBlockSize + Math.random() * blockSize;
+            return new THREE.Vector3(x, 0.2, z);
+        }
+
+        function setNewPedestrianTarget(p) {
+            if (Math.random() < 0.2) {
+                const dir = Math.floor(Math.random() * 4);
+                if (dir === 0 && p.block.i < citySize - 1) p.block.i++;
+                else if (dir === 1 && p.block.i > 0) p.block.i--;
+                else if (dir === 2 && p.block.j < citySize - 1) p.block.j++;
+                else if (dir === 3 && p.block.j > 0) p.block.j--;
+            }
+            p.target.copy(getNewTargetOnBlock(p.block));
+        }
+
+        function animatePedestrians() {
+            pedestrians.forEach(p => {
+                const pos = p.mesh.position;
+                if (pos.distanceTo(p.target) < 1) {
+                    setNewPedestrianTarget(p);
+                } else {
+                    const direction = p.target.clone().sub(pos).normalize();
+                    pos.x += direction.x * p.speed;
+                    pos.z += direction.z * p.speed;
+                    p.mesh.lookAt(p.target);
+                }
+            });
+        }
+
+        function animateClouds() {
+            const cityLimit = citySize * totalBlockSize;
+            clouds.forEach(cloudObj => {
+                cloudObj.mesh.position.x += cloudObj.speed;
+                if (cloudObj.mesh.position.x > cityLimit) {
+                    cloudObj.mesh.position.x = -cityLimit;
+                }
+            });
+        }
+
+        // --- REPLACED animateBirds with animateBoids ---
+        function animateBoids() {
+            for (let boid of boids) {
+                boid.flock(boids);
+                boid.update();
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
+
+            world.step(1/60, deltaTime, 3);
+
+            physicsObjects.forEach(obj => {
+                obj.mesh.position.copy(obj.body.position);
+                obj.mesh.quaternion.copy(obj.body.quaternion);
+            });
+
+            controls.update();
+            updateTrafficLights(deltaTime);
+            animateTraffic();
+            animatePedestrians();
+            animateClouds();
+            animateBoids(); // CHANGED
+
+            renderer.render(scene, camera);
+        }
+
+        function createRoadSegment(position, isHorizontal, length) {
+            const roadSize = isHorizontal ? new THREE.Vector2(length, roadWidth) : new THREE.Vector2(roadWidth, length);
+            const road = new THREE.Mesh(new THREE.PlaneGeometry(roadSize.x, roadSize.y), roadMat);
+            road.rotation.x = -Math.PI / 2;
+            road.position.copy(position);
+            road.receiveShadow = true;
+            cityGroup.add(road);
+
+            const lineLength = 1.5;
+            const lineGap = 1.5;
+            const segmentLength = lineLength + lineGap;
+            const lineGeo = new THREE.PlaneGeometry(isHorizontal ? lineLength : 0.1, isHorizontal ? 0.1 : lineLength);
+            const numLines = Math.floor(length / segmentLength);
+
+            for (let i = 0; i < numLines; i++) {
+                const line = new THREE.Mesh(lineGeo, yellowLineMat);
+                line.rotation.x = -Math.PI / 2;
+                const offset = -length / 2 + segmentLength * i + lineLength / 2;
+                if (isHorizontal) {
+                    line.position.set(position.x + offset, position.y + 0.01, position.z);
+                } else {
+                    line.position.set(position.x, position.y + 0.01, position.z + offset);
+                }
+                cityGroup.add(line);
+            }
+        }
+
+        function createIntersection(x, z, gridI, gridJ) {
+            const intersectionGeo = new THREE.PlaneGeometry(roadWidth, roadWidth);
+            const intersection = new THREE.Mesh(intersectionGeo, roadMat);
+            intersection.rotation.x = -Math.PI / 2;
+            intersection.position.set(x - roadWidth / 2, 0.01, z - roadWidth / 2);
+            cityGroup.add(intersection);
+
+            const stopLineGeoH = new THREE.PlaneGeometry(roadWidth / 2, 0.2);
+            const stopLineGeoV = new THREE.PlaneGeometry(0.2, roadWidth / 2);
+
+            const stopLineNS = new THREE.Mesh(stopLineGeoH, whiteLineMat);
+            stopLineNS.rotation.x = -Math.PI / 2;
+            stopLineNS.position.set(x - roadWidth * 0.25, 0.02, z - roadWidth);
+            cityGroup.add(stopLineNS);
+
+            const stopLineEW = new THREE.Mesh(stopLineGeoV, whiteLineMat);
+            stopLineEW.rotation.x = -Math.PI / 2;
+            stopLineEW.position.set(x - roadWidth, 0.02, z - roadWidth * 0.75);
+            cityGroup.add(stopLineEW);
+
+            const lightController = { state: Math.random() > 0.5 ? 'NS' : 'EW', timer: Math.random() * 10, cycleTime: 8 + Math.random() * 4, lights: {} };
+            const lightPosOffset = roadWidth + 1;
+
+            lightController.lights.nsRed = new THREE.Mesh(new THREE.SphereGeometry(0.3), redLightOffMat);
+            lightController.lights.nsGreen = new THREE.Mesh(new THREE.SphereGeometry(0.3), greenLightOffMat);
+            lightController.lights.nsRed.position.set(x - roadWidth * 0.75, 3.5, z - lightPosOffset);
+            lightController.lights.nsGreen.position.set(x - roadWidth * 0.75, 2.8, z - lightPosOffset);
+
+            lightController.lights.ewRed = new THREE.Mesh(new THREE.SphereGeometry(0.3), redLightOffMat);
+            lightController.lights.ewGreen = new THREE.Mesh(new THREE.SphereGeometry(0.3), greenLightOffMat);
+            lightController.lights.ewRed.position.set(x - lightPosOffset, 3.5, z - roadWidth * 0.25);
+            lightController.lights.ewGreen.position.set(x - lightPosOffset, 2.8, z - roadWidth * 0.25);
+
+            trafficGroup.add(lightController.lights.nsRed, lightController.lights.nsGreen, lightController.lights.ewRed, lightController.lights.ewGreen);
+
+            if (!trafficLights[gridI]) trafficLights[gridI] = [];
+            trafficLights[gridI][gridJ] = lightController;
+        }
+
+        function createTree(x, z, y) {
+            const trunkHeight = 2 + Math.random() * 2;
+            const trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, trunkHeight, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x665233 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.set(x, y + trunkHeight / 2, z);
+            trunk.castShadow = true;
+
+            const foliageRadius = 1 + Math.random();
+            const foliageGeo = new THREE.IcosahedronGeometry(foliageRadius, 0);
+            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x27ae60, flatShading: true });
+            const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+            foliage.position.set(x, y + trunkHeight + foliageRadius * 0.8, z);
+            foliage.castShadow = true;
+            cityGroup.add(trunk, foliage);
+        }
+
+        function generateTraffic(){
+            const numCars = 100;
+            for (let i = 0; i < numCars; i++) {
+                const car = createCar();
+                const movingAlongX = Math.random() > 0.5;
+                const startBlock = Math.floor(Math.random() * citySize);
+                const laneOffset = roadWidth / 4;
+                const speed = 0.2 + Math.random() * 0.2;
+                let carPos, carRot, direction;
+
+                if (movingAlongX) {
+                    const zPos = cityOffset + startBlock * totalBlockSize - laneOffset;
+                    carPos = new THREE.Vector3(cityOffset - 20, 0.5, zPos);
+                    carRot = new THREE.Euler(0, Math.PI / 2, 0);
+                    direction = 'x';
+                } else {
+                    const xPos = cityOffset + startBlock * totalBlockSize - laneOffset;
+                    carPos = new THREE.Vector3(xPos, 0.5, cityOffset - 20);
+                    carRot = new THREE.Euler(0, 0, 0);
+                    direction = 'z';
+                }
+
+                car.position.copy(carPos);
+                car.rotation.copy(carRot);
+
+                cars.push({ mesh: car, speed: speed, baseSpeed: speed, direction: direction });
+                trafficGroup.add(car);
+            }
+        }
+
+         function createCar(){
+            const carColors = [0xc0392b, 0x2980b9, 0xf1c40f, 0xecf0f1, 0x2c3e50];
+            const carGeo = new THREE.BoxGeometry(1.5, 1, 3);
+            const carMat = new THREE.MeshStandardMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)], metalness: 0.5, roughness: 0.5 });
+            const car = new THREE.Mesh(carGeo, carMat);
+            car.castShadow = true;
+            return car;
+        }
+
+         function updateTrafficLights(deltaTime){
+            for (let i = 0; i < citySize; i++) {
+                for (let j = 0; j < citySize; j++) {
+                    const light = trafficLights[i]?.[j];
+                    if (!light) continue;
+
+                    light.timer += deltaTime;
+                    if (light.timer > light.cycleTime) {
+                        light.timer = 0;
+                        light.state = light.state === 'NS' ? 'EW' : 'NS';
+                    }
+
+                    light.lights.nsGreen.material = light.state === 'NS' ? greenLightOnMat : greenLightOffMat;
+                    light.lights.nsRed.material = light.state !== 'NS' ? redLightOnMat : redLightOffMat;
+                    light.lights.ewGreen.material = light.state === 'EW' ? greenLightOnMat : greenLightOffMat;
+                    light.lights.ewRed.material = light.state !== 'EW' ? redLightOffMat : redLightOffMat;
+                }
+            }
+        }
+
+         function animateTraffic(){
+            const cityLimit = citySize * totalBlockSize / 2 + 10;
+            const safetyDistance = 5;
+
+            cars.forEach(carObj => {
+                const car = carObj.mesh;
+                carObj.speed = carObj.baseSpeed;
+
+                let carInFront = false;
+                for (const otherCarObj of cars) {
+                    if (car === otherCarObj.mesh) continue;
+                    if (carObj.direction === otherCarObj.direction) {
+                        const pos = car.position;
+                        const otherPos = otherCarObj.mesh.position;
+                        let distance;
+                        if (carObj.direction === 'x') {
+                            if (Math.abs(pos.z - otherPos.z) < 1 && otherPos.x > pos.x) {
+                                distance = otherPos.x - pos.x;
+                                if (distance > 0 && distance < safetyDistance) carInFront = true;
+                            }
+                        } else {
+                            if (Math.abs(pos.x - otherPos.x) < 1 && otherPos.z > pos.z) {
+                                distance = otherPos.z - pos.z;
+                                if (distance > 0 && distance < safetyDistance) carInFront = true;
+                            }
+                        }
+                    }
+                }
+                if (carInFront) carObj.speed = 0;
+
+                const stopDistance = 6;
+                const gridI = Math.floor((car.position.x - cityOffset + totalBlockSize) / totalBlockSize);
+                const gridJ = Math.floor((car.position.z - cityOffset + totalBlockSize) / totalBlockSize);
+
+                const light = trafficLights[gridI]?.[gridJ];
+                if (light) {
+                    const intersectionX = cityOffset + gridI * totalBlockSize - roadWidth;
+                    const intersectionZ = cityOffset + gridJ * totalBlockSize - roadWidth;
+
+                    if (carObj.direction === 'z' && light.state === 'EW' && Math.abs(car.position.z - intersectionZ) < stopDistance && car.position.z < intersectionZ) {
+                        carObj.speed = 0;
+                    } else if (carObj.direction === 'x' && light.state === 'NS' && Math.abs(car.position.x - intersectionX) < stopDistance && car.position.x < intersectionX) {
+                        carObj.speed = 0;
+                    }
+                }
+
+                if (carObj.direction === 'x') {
+                    car.position.x += carObj.speed;
+                    if (car.position.x > cityLimit) car.position.x = -cityLimit;
+                } else {
+                    car.position.z += carObj.speed;
+                    if (car.position.z > cityLimit) car.position.z = -cityLimit;
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+        animate();
+
+    </script>
+</body>
+</html>

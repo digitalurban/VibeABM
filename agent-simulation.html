@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Hall Crowd Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        canvas {
+            display: block;
+        }
+        #info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 15px 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            max-width: 300px;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+        }
+        p, label {
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+        .control-group {
+            margin-top: 10px;
+        }
+        button {
+            margin-top: 15px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: none;
+            background-color: #0d9488; /* Teal color */
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0f766e;
+        }
+        input[type="number"] {
+            width: 70px; 
+            background-color: #333; 
+            color: white; 
+            border: 1px solid #555; 
+            border-radius: 4px; 
+            padding: 4px;
+            margin-left: 5px;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin-top: 2px;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="info-panel">
+        <h1>Grand Hall Simulation</h1>
+        <p>Agents flow towards the exits, navigating around the large columns.</p>
+        <p>Agents remaining: <span id="agent-count">0</span></p>
+        <div class="control-group">
+            <label for="num-agents-input">Agent Count:</label>
+            <input type="number" id="num-agents-input" value="600" min="10" max="1500">
+        </div>
+        <div class="control-group">
+            <label for="lighting-slider">Lighting:</label>
+            <input type="range" id="lighting-slider" min="0" max="2" value="1.8" step="0.1">
+        </div>
+        <button id="reset-button">Reset Simulation</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script type="module">
+        // --- Basic Setup ---
+        let scene, camera, renderer, controls;
+        let agents = [];
+        let exits = [];
+        let obstacles = [];
+        const hallLength = 250;
+        const hallWidth = 150;
+        const wallHeight = 30;
+        const agentCountElement = document.getElementById('agent-count');
+        const numAgentsInput = document.getElementById('num-agents-input');
+        const resetButton = document.getElementById('reset-button');
+        const lightingSlider = document.getElementById('lighting-slider');
+        
+        // --- Path Drawing Setup ---
+        let pathCanvas, pathContext, pathTexture;
+        const pathCanvasSize = 1024;
+
+        // --- Lighting Variables ---
+        let ambientLight, keyLight;
+        const baseAmbientIntensity = 2.0; // Increased base intensity
+        const baseKeyLightIntensity = 2.5; // Increased base intensity
+
+        // --- Agent Class ---
+        class Agent {
+            constructor() {
+                const geometry = new THREE.CylinderGeometry(0.6, 0.6, 2, 8);
+                this.color = new THREE.Color().setHSL(Math.random(), 0.9, 0.6);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: this.color, 
+                    roughness: 0.5 
+                });
+                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh.castShadow = true;
+                this.mesh.position.y = 1;
+
+                this.velocity = new THREE.Vector3();
+                this.maxSpeed = 0.18 + Math.random() * 0.1;
+                this.maxForce = 0.02;
+                this.targetExit = null;
+                this.active = true;
+            }
+
+            // --- Steering Behaviors ---
+            seek(target) {
+                const desired = new THREE.Vector3().subVectors(target, this.mesh.position);
+                desired.normalize().multiplyScalar(this.maxSpeed);
+                const steer = new THREE.Vector3().subVectors(desired, this.velocity);
+                steer.clampLength(0, this.maxForce);
+                return steer;
+            }
+
+            separate(agents) {
+                const desiredSeparation = 5.0;
+                const steer = new THREE.Vector3();
+                let count = 0;
+                for (const other of agents) {
+                    if (!other.active || other === this) continue;
+                    const d = this.mesh.position.distanceTo(other.mesh.position);
+                    if ((d > 0) && (d < desiredSeparation)) {
+                        const diff = new THREE.Vector3().subVectors(this.mesh.position, other.mesh.position);
+                        diff.y = 0; // Only separate on the horizontal plane
+                        diff.normalize().divideScalar(d);
+                        steer.add(diff);
+                        count++;
+                    }
+                }
+                if (count > 0) steer.divideScalar(count);
+                if (steer.lengthSq() > 0) {
+                    steer.normalize().multiplyScalar(this.maxSpeed);
+                    steer.sub(this.velocity);
+                    steer.clampLength(0, this.maxForce);
+                }
+                return steer;
+            }
+            
+            avoid(obstacles) {
+                const steer = new THREE.Vector3();
+                const lookAheadTime = 50.0; 
+                const dynamicAvoidanceRadius = this.velocity.length() * 10.0 + 5.0;
+
+                let mostThreatening = null;
+                let closestDist = Infinity;
+
+                for (const obstacle of obstacles) {
+                    const obstacleRadius = obstacle.geometry.parameters.radiusTop || 0;
+                    const toObstacle = new THREE.Vector3().subVectors(obstacle.position, this.mesh.position);
+                    const dot = toObstacle.dot(this.velocity.clone().normalize());
+
+                    if (dot > 0) {
+                        const distToPath = toObstacle.clone().projectOnVector(this.velocity).sub(toObstacle).length();
+                        if (distToPath < obstacleRadius + dynamicAvoidanceRadius) {
+                            const dist = this.mesh.position.distanceTo(obstacle.position);
+                            if (dist < closestDist) {
+                                closestDist = dist;
+                                mostThreatening = obstacle;
+                            }
+                        }
+                    }
+                }
+
+                if (mostThreatening) {
+                    const avoidanceForce = new THREE.Vector3().subVectors(this.mesh.position, mostThreatening.position);
+                    avoidanceForce.y = 0;
+                    avoidanceForce.normalize().multiplyScalar(this.maxSpeed);
+                    steer.add(avoidanceForce);
+                    steer.sub(this.velocity);
+                    steer.clampLength(0, this.maxForce * 3.5);
+                }
+
+                return steer;
+            }
+
+            applyBehaviors(agents, obstacles) {
+                if (!this.active || !this.targetExit) return;
+
+                const seekForce = this.seek(this.targetExit);
+                const separateForce = this.separate(agents);
+                const avoidForce = this.avoid(obstacles);
+
+                separateForce.multiplyScalar(1.8);
+                avoidForce.multiplyScalar(3.0); 
+
+                this.velocity.add(seekForce);
+                this.velocity.add(separateForce);
+                this.velocity.add(avoidForce);
+                
+                this.velocity.clampLength(0, this.maxSpeed);
+                this.mesh.position.add(this.velocity);
+
+                this.mesh.position.y = 1;
+
+                // *** NEW: Final collision check and correction to prevent entering pillars ***
+                for (const obstacle of obstacles) {
+                    if (obstacle.geometry.type === 'CylinderGeometry') {
+                        const pillarRadius = obstacle.geometry.parameters.radiusTop;
+                        const agentRadius = this.mesh.geometry.parameters.radiusTop;
+                        const totalRadius = pillarRadius + agentRadius;
+
+                        const vecToAgent = new THREE.Vector3().subVectors(this.mesh.position, obstacle.position);
+                        vecToAgent.y = 0; // Project to XZ plane
+                        const dist = vecToAgent.length();
+
+                        if (dist < totalRadius) {
+                            // Collision detected, push the agent out
+                            const pushoutVector = vecToAgent.normalize().multiplyScalar(totalRadius);
+                            this.mesh.position.x = obstacle.position.x + pushoutVector.x;
+                            this.mesh.position.z = obstacle.position.z + pushoutVector.z;
+                        }
+                    }
+                }
+
+
+                if (this.mesh.position.x > hallLength / 2 - 5) {
+                    this.active = false;
+                    scene.remove(this.mesh);
+                }
+            }
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            scene.fog = new THREE.Fog(0x1a1a1a, hallLength * 0.6, hallLength * 1.5);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(-hallLength * 0.4, 180, 200);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0, 0);
+
+            createLighting();
+            createLayout();
+            setupSimulation();
+
+            window.addEventListener('resize', onWindowResize, false);
+            resetButton.addEventListener('click', resetSimulation);
+            lightingSlider.addEventListener('input', updateLighting);
+        }
+
+        function createLighting() {
+            ambientLight = new THREE.AmbientLight(0x666666, baseAmbientIntensity);
+            scene.add(ambientLight);
+
+            // "Sun" style light - high up and powerful
+            keyLight = new THREE.DirectionalLight(0xffffff, baseKeyLightIntensity);
+            keyLight.position.set(50, 150, 50);
+            keyLight.castShadow = true;
+            keyLight.shadow.camera.left = -hallLength / 2;
+            keyLight.shadow.camera.right = hallLength / 2;
+            keyLight.shadow.camera.top = hallWidth / 2;
+            keyLight.shadow.camera.bottom = -hallWidth / 2;
+            keyLight.shadow.mapSize.width = 2048;
+            keyLight.shadow.mapSize.height = 2048;
+            keyLight.shadow.bias = -0.001;
+            scene.add(keyLight);
+            updateLighting(); // Set initial lighting based on slider
+        }
+
+        function updateLighting() {
+            const sliderValue = parseFloat(lightingSlider.value);
+            if (ambientLight) {
+                ambientLight.intensity = baseAmbientIntensity * sliderValue;
+            }
+            if (keyLight) {
+                keyLight.intensity = baseKeyLightIntensity * sliderValue;
+            }
+        }
+
+        function createLayout() {
+            exits.forEach(e => scene.remove(e));
+            obstacles.forEach(o => scene.remove(o));
+            exits = [];
+            obstacles = [];
+
+            // --- Setup canvas for path drawing ---
+            pathCanvas = document.createElement('canvas');
+            pathCanvas.width = pathCanvasSize;
+            pathCanvas.height = pathCanvasSize;
+            pathContext = pathCanvas.getContext('2d');
+            pathTexture = new THREE.CanvasTexture(pathCanvas);
+            
+            // Floor
+            const floorGeo = new THREE.PlaneGeometry(hallLength, hallWidth);
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                color: 0x404040, 
+                roughness: 0.7,
+                map: pathTexture // Apply the canvas texture
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            clearPaths(); // Set initial background color of path canvas
+
+            // Walls
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+            const wallGeoSide = new THREE.BoxGeometry(hallLength, wallHeight, 2);
+            const wallGeoBack = new THREE.BoxGeometry(2, wallHeight, hallWidth);
+            
+            const wall1 = new THREE.Mesh(wallGeoSide, wallMat);
+            wall1.position.z = hallWidth / 2;
+            wall1.position.y = wallHeight / 2;
+            scene.add(wall1);
+
+            const wall2 = new THREE.Mesh(wallGeoSide, wallMat);
+            wall2.position.z = -hallWidth / 2;
+            wall2.position.y = wallHeight / 2;
+            scene.add(wall2);
+            
+            const wall3 = new THREE.Mesh(wallGeoBack, wallMat);
+            wall3.position.x = -hallLength / 2;
+            wall3.position.y = wallHeight / 2;
+            scene.add(wall3);
+
+            // Large Columns
+            const pillarGeo = new THREE.CylinderGeometry(8, 8, wallHeight, 32);
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const numPillars = 3;
+            for (let i = 0; i < numPillars; i++) {
+                const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                pillar.position.x = 0;
+                pillar.position.y = wallHeight / 2;
+                pillar.position.z = THREE.MathUtils.lerp(-hallWidth/2 + 30, hallWidth/2 - 30, i / (numPillars - 1));
+                pillar.castShadow = true;
+                pillar.receiveShadow = true;
+                scene.add(pillar);
+                obstacles.push(pillar);
+            }
+
+            // Create Exits (visual only)
+            const exitGeo = new THREE.PlaneGeometry(hallWidth * 0.8, wallHeight * 0.7);
+            const exitMat = new THREE.MeshBasicMaterial({ color: 0x14b8a6 }); // Teal exit sign
+            const exit = new THREE.Mesh(exitGeo, exitMat);
+            exit.position.x = hallLength / 2 - 1;
+            exit.position.y = wallHeight * 0.7 / 2;
+            exit.rotation.y = -Math.PI / 2;
+            exits.push(exit);
+            scene.add(exit);
+        }
+        
+        function clearPaths() {
+            pathContext.fillStyle = '#404040'; // Match floor color
+            pathContext.fillRect(0, 0, pathCanvasSize, pathCanvasSize);
+            pathTexture.needsUpdate = true;
+        }
+
+        function setupSimulation() {
+            clearPaths();
+            agents.forEach(agent => scene.remove(agent.mesh));
+            agents = [];
+            const numAgents = parseInt(numAgentsInput.value, 10) || 600;
+
+            const targetExit = new THREE.Vector3(hallLength / 2, 1, 0);
+
+            for (let i = 0; i < numAgents; i++) {
+                const agent = new Agent();
+                const x = -hallLength / 2 + Math.random() * (hallLength * 0.6);
+                const z = Math.random() * (hallWidth - 20) - (hallWidth / 2 - 10);
+                agent.mesh.position.set(x, 1, z);
+
+                agent.targetExit = targetExit;
+                agents.push(agent);
+                scene.add(agent.mesh);
+            }
+            updateAgentCount();
+        }
+
+        function resetSimulation() {
+            setupSimulation();
+        }
+
+        function updateAgentCount() {
+            const activeAgents = agents.filter(a => a.active).length;
+            agentCountElement.textContent = activeAgents;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function drawPaths() {
+            agents.forEach(agent => {
+                if(agent.active) {
+                    // Convert world position to canvas coordinates
+                    const u = ((agent.mesh.position.x + hallLength / 2) / hallLength) * pathCanvasSize;
+                    const v = ((-agent.mesh.position.z + hallWidth / 2) / hallWidth) * pathCanvasSize;
+                    
+                    pathContext.fillStyle = agent.color.getStyle();
+                    pathContext.fillRect(u, v, 2, 2); // Draw a 2x2 pixel for visibility
+                }
+            });
+            pathTexture.needsUpdate = true;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            agents.forEach(agent => {
+                agent.applyBehaviors(agents, obstacles);
+            });
+            
+            if (renderer.info.render.frame % 5 === 0) { // Update UI and paths more frequently
+                 updateAgentCount();
+                 drawPaths();
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+        animate();
+
+    </script>
+</body>
+</html>
