@@ -6,7 +6,7 @@ This repository hosts a series of interactive web-based simulations exploring di
 
 ### 1. Procedural City & Multi-Agent System
 
-**✨ [View Live Demo: `procedural-city.html`](https://your-username.github.io/your-repository-name/procedural-city.html)**
+**✨ [View Live Demo: `procedural-city.html`](https://https://github.com/digitalurban/VibeABM/procedural-city.html)**
 
 This simulation generates a complete 3D city procedurally and populates it with several types of autonomous agents, each exhibiting distinct behaviors.
 
@@ -24,7 +24,7 @@ This simulation generates a complete 3D city procedurally and populates it with 
 
 ### 2. Asteroid Clock - Reactive Agents
 
-**✨ [View Live Demo: `asteroid-clock.html`](https://your-username.github.io/your-repository-name/asteroid-clock.html)**
+**✨ [View Live Demo: `asteroid-clock.html`](https://https://github.com/digitalurban/VibeABM/asteroid-clock.html)**
 
 This project reinterprets the classic arcade game *Asteroids* as a generative agent-based model that visualizes the current time. The simulation resets every minute, creating a perpetual, self-playing game.
 
@@ -40,7 +40,7 @@ This project reinterprets the classic arcade game *Asteroids* as a generative ag
 
 ### 3. Grand Hall - Crowd & Egress Simulation
 
-**✨ [View Live Demo: `agent-simulation.html`](https://your-username.github.io/your-repository-name/agent-simulation.html)**
+**✨ [View Live Demo: `agent-simulation.html`](https://https://github.com/digitalurban/VibeABM/agent-simulation.html)**
 
 This is a large-scale crowd simulation demonstrating how hundreds of agents navigate a complex indoor environment to reach a designated exit. The paths the agents take are visualized as colored trails on the floor.
 
