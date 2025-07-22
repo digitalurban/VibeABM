@@ -59,7 +59,7 @@ This is a large-scale crowd simulation demonstrating how hundreds of agents navi
 
 ---
 
-### 4. Space Invaders Clock - A Classic Agent-Based System
+### 4. Space Invaders Clock - (Created with Gemini 2.5 Pro)
 
 ![Space Invaders Clock](https://github.com/digitalurban/VibeABM/blob/main/images/invaders.png)
 
