@@ -57,6 +57,8 @@ This is a large-scale crowd simulation demonstrating how hundreds of agents navi
 * **Separation:** Agents actively try to maintain a personal space, steering away from other agents that get too close. This prevents unrealistic crowding and creates natural-looking flows of people.
 * **Path Visualization:** As each agent moves, it leaves a colored trail on the floor, creating a visual record of the emergent pathways and crowd dynamics over time.
 
+---
+
 ### 4. Space Invaders Clock - A Classic Agent-Based System
 
 ![Space Invaders Clock](https://github.com/digitalurban/VibeABM/blob/main/images/invaders.png)
