@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Flocking Simulation</title>
+    <style>
+        /* Basic styles for the body and canvas */
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #dbe9f4; /* Fallback background color */
+            color: #1f2937; /* Darker text for light background */
+        }
+        canvas {
+            display: block;
+        }
+        /* Styling for the controls panel */
+        #controls {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background-color: rgba(255, 255, 255, 0.7); /* Light, semi-transparent */
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            max-width: 320px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        input[type="range"] {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        /* Custom slider track */
+        input[type="range"]::-webkit-slider-runnable-track {
+            background: #d1d5db;
+            height: 6px;
+            border-radius: 3px;
+        }
+        input[type="range"]::-moz-range-track {
+            background: #d1d5db;
+            height: 6px;
+            border-radius: 3px;
+        }
+        /* Custom slider thumb */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            margin-top: -5px; /* Centers thumb on the track */
+            background-color: #3b82f6;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+        }
+        input[type="range"]::-moz-range-thumb {
+            background-color: #3b82f6;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+        }
+        .value-display {
+            float: right;
+            font-size: 14px;
+            color: #4b5563;
+        }
+    </style>
+    <!-- Google Fonts for a cleaner look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Container for the simulation controls -->
+    <div id="controls">
+        <div class="control-group">
+            <label for="population">Population <span class="value-display" id="population-value">150</span></label>
+            <input type="range" id="population" min="1" max="1000" value="150">
+        </div>
+         <div class="control-group">
+            <label for="maxSpeed">Max Speed <span class="value-display" id="maxSpeed-value">0.6</span></label>
+            <input type="range" id="maxSpeed" min="0.1" max="10" value="0.6" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="alignment">Alignment <span class="value-display" id="alignment-value">1.2</span></label>
+            <input type="range" id="alignment" min="0" max="5" value="1.2" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="cohesion">Cohesion <span class="value-display" id="cohesion-value">1.2</span></label>
+            <input type="range" id="cohesion" min="0" max="5" value="1.2" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="separation">Separation <span class="value-display" id="separation-value">1.5</span></label>
+            <input type="range" id="separation" min="0" max="5" value="1.5" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="vision">Vision Radius <span class="value-display" id="vision-value">50</span></label>
+            <input type="range" id="vision" min="10" max="200" value="50" step="1">
+        </div>
+    </div>
+
+    <!-- Import three.js and OrbitControls -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Global Variables & Scene Setup ---
+        let scene, camera, renderer, controls;
+        const boids = [];
+        const BOUNDS = 300; // The size of the cubic area the boids fly in
+
+        // --- Simulation Parameters (controlled by sliders) ---
+        let params = {
+            population: 150,
+            alignmentForce: 1.2,
+            cohesionForce: 1.2,
+            separationForce: 1.5,
+            visionRadius: 50,
+            maxSpeed: 0.6,
+        };
+
+        // --- Boid Class ---
+        class Boid {
+            constructor() {
+                // Core properties for movement
+                const startRadius = BOUNDS / 8;
+                this.position = new THREE.Vector3()
+                    .randomDirection()
+                    .multiplyScalar(Math.random() * startRadius);
+
+                const baseVelocity = new THREE.Vector3(1, 0.5, 0);
+                const randomVelocity = new THREE.Vector3(
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1,
+                    Math.random() * 2 - 1
+                ).multiplyScalar(0.2);
+                this.velocity = baseVelocity.add(randomVelocity);
+                this.velocity.setLength(Math.random() * 0.2 + 0.4); // Slower initial speed
+
+                this.acceleration = new THREE.Vector3();
+                this.maxForce = 0.05;
+
+                // 3D representation with better material
+                const geometry = new THREE.ConeGeometry(2, 8, 6);
+                geometry.rotateX(Math.PI / 2);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: new THREE.Color().setHSL(Math.random(), 0.7, 0.5),
+                    metalness: 0.5,
+                    roughness: 0.6,
+                });
+                this.mesh = new THREE.Mesh(geometry, material);
+                // this.mesh.castShadow = false; // No shadows without a ground
+                this.mesh.position.copy(this.position);
+                const lookTarget = this.position.clone().add(this.velocity);
+                this.mesh.lookAt(lookTarget);
+                scene.add(this.mesh);
+            }
+
+            // --- Core Flocking Logic ---
+            flock(allBoids) {
+                const alignment = this.align(allBoids);
+                const cohesion = this.cohere(allBoids);
+                const separation = this.separate(allBoids);
+
+                alignment.multiplyScalar(params.alignmentForce);
+                cohesion.multiplyScalar(params.cohesionForce);
+                separation.multiplyScalar(params.separationForce);
+
+                this.acceleration.add(alignment);
+                this.acceleration.add(cohesion);
+                this.acceleration.add(separation);
+            }
+
+            update() {
+                this.velocity.add(this.acceleration);
+                this.velocity.clampLength(0, params.maxSpeed); // Use dynamic maxSpeed
+                this.position.add(this.velocity);
+                this.acceleration.multiplyScalar(0);
+                this.mesh.position.copy(this.position);
+                const lookTarget = this.position.clone().add(this.velocity);
+                this.mesh.lookAt(lookTarget);
+            }
+
+            // --- Flocking Rules ---
+            align(allBoids) {
+                const steering = new THREE.Vector3();
+                let total = 0;
+                for (let other of allBoids) {
+                    const d = this.position.distanceTo(other.position);
+                    if (other !== this && d < params.visionRadius) {
+                        steering.add(other.velocity);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.setLength(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, this.maxForce);
+                }
+                return steering;
+            }
+
+            cohere(allBoids) {
+                const steering = new THREE.Vector3();
+                let total = 0;
+                for (let other of allBoids) {
+                    const d = this.position.distanceTo(other.position);
+                    if (other !== this && d < params.visionRadius) {
+                        steering.add(other.position);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.sub(this.position);
+                    steering.setLength(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, this.maxForce);
+                }
+                return steering;
+            }
+
+            separate(allBoids) {
+                const steering = new THREE.Vector3();
+                let total = 0;
+                const separationRadius = params.visionRadius / 1.5; // Increased separation radius for less crowding
+                for (let other of allBoids) {
+                    const d = this.position.distanceTo(other.position);
+                    if (other !== this && d < separationRadius) {
+                        const diff = new THREE.Vector3().subVectors(this.position, other.position);
+                        diff.divideScalar(d * d);
+                        steering.add(diff);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.divideScalar(total);
+                    steering.setLength(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.clampLength(0, this.maxForce);
+                }
+                return steering;
+            }
+            
+            checkEdges() {
+                const halfBounds = BOUNDS / 2;
+                if (this.position.x > halfBounds) this.position.x = -halfBounds;
+                if (this.position.x < -halfBounds) this.position.x = halfBounds;
+                if (this.position.y > halfBounds) this.position.y = -halfBounds;
+                if (this.position.y < -halfBounds) this.position.y = halfBounds;
+                if (this.position.z > halfBounds) this.position.z = -halfBounds;
+                if (this.position.z < -halfBounds) this.position.z = halfBounds;
+            }
+        }
+
+        // --- Initialization and Main Loop ---
+        function init() {
+            scene = new THREE.Scene();
+
+            // Sky-like background using a canvas gradient
+            const canvas = document.createElement('canvas');
+            canvas.width = 2;
+            canvas.height = 512;
+            const context = canvas.getContext('2d');
+            const gradient = context.createLinearGradient(0, 0, 0, 512);
+            gradient.addColorStop(0, '#4f80c0'); // Sky blue
+            gradient.addColorStop(1, '#dbe9f4'); // Lighter horizon
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 2, 512);
+            const backgroundTexture = new THREE.CanvasTexture(canvas);
+            scene.background = backgroundTexture;
+
+            // Add fog for depth perception
+            scene.fog = new THREE.Fog(0xdbe9f4, 250, 600); // Reduced fog
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 50, 250);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio); // For sharper images
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // renderer.shadowMap.enabled = false; // Shadows disabled
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            scene.add(new THREE.HemisphereLight(0xadd8e6, 0x444444, 1.5)); // Sky/ground light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            directionalLight.position.set(100, 150, 50);
+            // directionalLight.castShadow = false;
+            scene.add(directionalLight);
+
+            // Bounding box visual restored
+            const boxGeom = new THREE.BoxGeometry(BOUNDS, BOUNDS, BOUNDS);
+            const boxEdges = new THREE.EdgesGeometry(boxGeom);
+            const boxLines = new THREE.LineSegments(boxEdges, new THREE.LineBasicMaterial({ color: 0x6b7280 }));
+            scene.add(boxLines);
+            
+            // Ground Plane removed
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            updatePopulation();
+            setupEventListeners();
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            for (let boid of boids) {
+                boid.checkEdges();
+                boid.flock(boids);
+                boid.update();
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- Helper Functions ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function updatePopulation() {
+            while (boids.length < params.population) {
+                boids.push(new Boid());
+            }
+            while (boids.length > params.population) {
+                const boidToRemove = boids.pop();
+                scene.remove(boidToRemove.mesh);
+            }
+        }
+        
+        function setupEventListeners() {
+            const sliders = {
+                population: document.getElementById('population'),
+                maxSpeed: document.getElementById('maxSpeed'),
+                alignment: document.getElementById('alignment'),
+                cohesion: document.getElementById('cohesion'),
+                separation: document.getElementById('separation'),
+                vision: document.getElementById('vision'),
+            };
+
+            const values = {
+                population: document.getElementById('population-value'),
+                maxSpeed: document.getElementById('maxSpeed-value'),
+                alignment: document.getElementById('alignment-value'),
+                cohesion: document.getElementById('cohesion-value'),
+                separation: document.getElementById('separation-value'),
+                vision: document.getElementById('vision-value'),
+            };
+
+            sliders.population.addEventListener('input', (e) => {
+                params.population = parseInt(e.target.value);
+                values.population.textContent = params.population;
+                updatePopulation();
+            });
+            
+            sliders.maxSpeed.addEventListener('input', (e) => {
+                params.maxSpeed = parseFloat(e.target.value);
+                values.maxSpeed.textContent = params.maxSpeed.toFixed(1);
+            });
+
+            sliders.alignment.addEventListener('input', (e) => {
+                params.alignmentForce = parseFloat(e.target.value);
+                values.alignment.textContent = params.alignmentForce.toFixed(1);
+            });
+
+            sliders.cohesion.addEventListener('input', (e) => {
+                params.cohesionForce = parseFloat(e.target.value);
+                values.cohesion.textContent = params.cohesionForce.toFixed(1);
+            });
+
+            sliders.separation.addEventListener('input', (e) => {
+                params.separationForce = parseFloat(e.target.value);
+                values.separation.textContent = params.separationForce.toFixed(1);
+            });
+
+            sliders.vision.addEventListener('input', (e) => {
+                params.visionRadius = parseInt(e.target.value);
+                values.vision.textContent = params.visionRadius;
+            });
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
