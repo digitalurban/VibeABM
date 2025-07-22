@@ -114,3 +114,34 @@ This simulation models the emergent foraging behavior of slime mold (*Physarum p
 * **Trail Decay:** To ensure the network can adapt, the pheromone trails slowly decay and diffuse over time, allowing old, unused paths to fade away.
 
 * **Interactive Controls:** The simulation allows you to directly influence the model's parameters by clicking to add new food sources or using the slider to change the agent population density in real-time.
+
+---
+
+  ### 6. 3D Flocking Simulation (Created with Gemini 2.5 Pro)
+  
+![3D Flocking Simulation](https://github.com/digitalurban/VibeABM/blob/main/images/flocking.png)
+
+**✨ [View Live Demo: `flocking.html`](https://digitalurban.github.io/VibeABM/flocking.html)**
+
+A visually polished 3D implementation of Craig Reynolds' classic "Boids" algorithm, demonstrating emergent flocking behavior in a serene, sky-like environment.
+
+#### Agent Behaviors:
+
+* **The Boids Algorithm:** The complex, fluid motion of the flock is not programmed directly but emerges from each "boid" agent making its own decisions based on its local neighborhood. Each boid follows three foundational rules:
+    1.  **Separation:** This is the collision avoidance rule. Each boid looks at its nearby flockmates and calculates a steering force to move away from them. This prevents the boids from clumping together into a single point and ensures they maintain personal space.
+    2.  **Alignment:** This rule drives the flock's coordinated movement. Each boid observes the average heading (direction of travel) of its nearby flockmates and adjusts its own heading to match. This is what makes the flock turn and move as a cohesive group.
+    3.  **Cohesion:** This rule keeps the flock together. Each boid calculates the average position of its neighbors and steers towards that center point. This prevents the flock from dispersing and encourages agents to stay with the group.
+* **Emergent Behavior:** The key principle of the model is how these three simple, decentralized rules, when applied simultaneously to hundreds of agents, result in complex flocking patterns. The balance between these forces, adjustable via the sliders, determines the overall character of the flock—whether it's tight and organized or loose and scattered.
+
+#### Environment & Interaction:
+
+* **3D Space:** The boids fly within a large, cubic simulation space, indicated by a wireframe cube.
+* **Atmospheric Rendering:** The scene features a soft, sky-gradient background and gentle fog to create a sense of depth and atmosphere.
+* **Interactive Controls:** A clean UI with sliders allows for real-time control over the simulation's key parameters, including the total population (up to 1000), maximum speed, vision radius, and the relative strength of the alignment, cohesion, and separation forces.
+
+
+
+
+
+
+
