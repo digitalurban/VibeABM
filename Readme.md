@@ -1,10 +1,12 @@
 # A Collection of Vibe Coded Agent-Based Model Simulations
 
-This repository hosts a series of interactive web-based simulations exploring different forms of Agent-Based Models (ABMs). Each simulation is self-contained in a single HTML file and uses JavaScript and Three.js to render dynamic systems where autonomous agents interact with each other and their environment based on a set of rules.
+This repository hosts a series of interactive web-based simulations exploring different forms of Agent Based Models (ABMs). Each simulation is self-contained in a single HTML file and uses JavaScript and Three.js to render dynamic systems where autonomous agents interact with each other and their environment based on a set of rules.
 
 ---
 
 ### 1. Procedural City & Multi-Agent System (Created with Gemini 2.5 Pro)
+
+![Procedural City Demo](https://github.com/digitalurban/VibeABM/blob/main/images/procedural.png)
 
 **✨ [View Live Demo: `proceduralcity.html`](https://digitalurban.github.io/VibeABM/proceduralcity.html)**
 
@@ -24,6 +26,8 @@ This simulation generates a complete 3D city procedurally and populates it with 
 
 ### 2. Asteroid Clock - Reactive Agents (Created with Gemini 2.5 Pro)
 
+![Asteroid Clock Demo](https://github.com/digitalurban/VibeABM/blob/main/images/asteroids.png)
+
 **✨ [View Live Demo: `asteroidsclock.html`](https://digitalurban.github.io/VibeABM/asteroidsclock.html)**
 
 This project reinterprets the classic arcade game *Asteroids* as a generative agent-based model that visualizes the current time. The simulation resets every minute, creating a perpetual, self-playing game.
@@ -40,7 +44,9 @@ This project reinterprets the classic arcade game *Asteroids* as a generative ag
 
 ### 3. Grand Hall - Crowd & Egress Simulation (Created with Gemini 2.5 Pro)
 
-**✨ [View Live Demo: `agentsllm.html`](https://digitalurban.github.io/VibeABM/agent-simulation.html)**
+![Grand Hall Demo](https://github.com/digitalurban/VibeABM/blob/main/images/grandhall.png)
+
+**✨ [View Live Demo: `agent-simulation.html`](https://digitalurban.github.io/VibeABM/agent-simulation.html)**
 
 This is a large-scale crowd simulation demonstrating how hundreds of agents navigate a complex indoor environment to reach a designated exit. The paths the agents take are visualized as colored trails on the floor.
 
