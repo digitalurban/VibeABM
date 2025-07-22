@@ -88,3 +88,29 @@ A generative, self-playing recreation of the 1978 arcade classic *Space Invaders
 * **The Mystery Ship (UFO):** A simple agent with a single rule: appear at random, infrequent intervals and travel horizontally across the top of the screen.
 
 * **Shields (Environmental Objects):** While not agents, the shields are a key part of the environment that can be dynamically altered. They erode realistically at the point of impact from bullet agents, affecting the strategic options for both the player and invader agents.
+
+---
+  
+### 5. Generative Slime Mold Simulation
+
+![Slime Mold Simulation](https://github.com/digitalurban/VibeABM/blob/main/images/slime.png)
+
+**✨ [View Live Demo: `slimemold.html`](https://digitalurban.github.io/VibeABM/slimemold.html)**
+
+This simulation models the emergent foraging behavior of slime mold (*Physarum polycephalum*). It demonstrates how thousands of simple, autonomous agents following basic rules can create complex, efficient, and organic-looking networks.
+
+#### Agent Behaviors:
+
+* **Exploration & Scent-Following:** Each agent wanders the space randomly. However, its primary rule is to "sniff" the area in front of it and steer towards the direction with the strongest chemical (pheromone) trail.
+
+* **Pheromone Deposition:** As an agent moves, it leaves behind its own pheromone trail, reinforcing the path for other agents.
+
+* **Emergent Intelligence:** This simple feedback loop—where agents both follow and reinforce trails—is the core of the model. It causes agents to abandon inefficient paths in favor of the most-traveled routes, leading to the spontaneous formation of vein-like structures connecting the food sources.
+
+#### Environmental Factors & Interaction:
+
+* **Food Sources:** The green dots act as permanent, powerful scent beacons. They emit a constant "scent aura" that attracts agents from a distance, anchoring the network.
+
+* **Trail Decay:** To ensure the network can adapt, the pheromone trails slowly decay and diffuse over time, allowing old, unused paths to fade away.
+
+* **Interactive Controls:** The simulation allows you to directly influence the model's parameters by clicking to add new food sources or using the slider to change the agent population density in real-time.
