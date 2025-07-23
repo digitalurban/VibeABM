@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Procedural City AR</title>
+    <title>Procedural City - MindAR</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111827; color: #fff; }
-        canvas { display: block; }
+        body, html { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000; }
+        /* Container for the AR view */
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
         #ui-panel {
             position: absolute;
             top: 20px;
@@ -15,15 +21,15 @@
             backdrop-filter: blur(10px);
             padding: 25px;
             border-radius: 15px;
-            width: 320px;
+            width: 300px; /* Adjusted width */
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
             border: 1px solid rgba(255, 255, 255, 0.18);
             z-index: 10;
-            transition: opacity 0.5s;
+            display: none; /* Hidden until AR starts */
         }
         h1 {
             margin-top: 0;
-            font-size: 1.6em;
+            font-size: 1.5em; /* Adjusted size */
             color: #f3f4f6;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
             padding-bottom: 15px;
@@ -33,11 +39,11 @@
             background: linear-gradient(45deg, #f97316, #ea580c);
             color: white;
             border: none;
-            padding: 15px 25px;
+            padding: 12px 20px; /* Adjusted padding */
             border-radius: 10px;
             cursor: pointer;
             width: 100%;
-            font-size: 1.1em;
+            font-size: 1em; /* Adjusted size */
             font-weight: bold;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4);
@@ -66,25 +72,17 @@
             font-size: 1em;
             box-sizing: border-box;
         }
-        /* AR Button Styling */
-        #ARButton {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            padding: 12px 24px;
-            border-radius: 8px;
-            background-color: #f97316;
-            color: white;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- MindAR and Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+    
     <!-- Physics Engine -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 </head>
 <body>
+    <div id="container"></div>
     <div id="ui-panel">
         <h1>Procedural City AR</h1>
         <button id="generate-btn">Generate New City</button>
@@ -95,25 +93,13 @@
         </div>
     </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
-
-    <!-- Main Application Script -->
     <script type="module">
-        import * as THREE from 'three';
-        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        // Use the MINDAR global object provided by the script
+        const MindARThree = window.MINDAR.IMAGE.MindARThree;
 
         // --- Scene Globals ---
-        let scene, camera, renderer, clock, world;
-        let controller, reticle; // AR specific
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
+        let clock, world;
+        let mindarThree; // MindAR controller
 
         const cityGroup = new THREE.Group();
         const trafficGroup = new THREE.Group();
@@ -189,195 +175,91 @@
                 this.mesh.position.copy(this.position);
                 birdsGroup.add(this.mesh);
             }
-            separation(boids) {
-                let steering = new THREE.Vector3();
-                let total = 0;
-                for (let other of boids) {
-                    let d = this.position.distanceTo(other.position);
-                    if (other !== this && d < PERCEPTION_RADIUS / 2) {
-                        let diff = new THREE.Vector3().subVectors(this.position, other.position);
-                        diff.divideScalar(d * d);
-                        steering.add(diff);
-                        total++;
-                    }
-                }
-                if (total > 0) {
-                    steering.divideScalar(total);
-                    steering.setLength(MAX_SPEED);
-                    steering.sub(this.velocity);
-                    steering.clampLength(0, MAX_FORCE);
-                }
-                return steering;
-            }
-            alignment(boids) {
-                let steering = new THREE.Vector3();
-                let total = 0;
-                for (let other of boids) {
-                    let d = this.position.distanceTo(other.position);
-                    if (other !== this && d < PERCEPTION_RADIUS) {
-                        steering.add(other.velocity);
-                        total++;
-                    }
-                }
-                if (total > 0) {
-                    steering.divideScalar(total);
-                    steering.setLength(MAX_SPEED);
-                    steering.sub(this.velocity);
-                    steering.clampLength(0, MAX_FORCE);
-                }
-                return steering;
-            }
-            cohesion(boids) {
-                let steering = new THREE.Vector3();
-                let total = 0;
-                for (let other of boids) {
-                    let d = this.position.distanceTo(other.position);
-                    if (other !== this && d < PERCEPTION_RADIUS) {
-                        steering.add(other.position);
-                        total++;
-                    }
-                }
-                if (total > 0) {
-                    steering.divideScalar(total);
-                    steering.sub(this.position);
-                    steering.setLength(MAX_SPEED);
-                    steering.sub(this.velocity);
-                    steering.clampLength(0, MAX_FORCE);
-                }
-                return steering;
-            }
-            bounds() {
-                const turnForce = 0.1;
-                let steering = new THREE.Vector3();
-                if (this.position.x > BOID_BOUNDS) steering.x = -turnForce;
-                else if (this.position.x < -BOID_BOUNDS) steering.x = turnForce;
-                if (this.position.y > 120) steering.y = -turnForce;
-                else if (this.position.y < 40) steering.y = turnForce;
-                if (this.position.z > BOID_BOUNDS) steering.z = -turnForce;
-                else if (this.position.z < -BOID_BOUNDS) steering.z = turnForce;
-                return steering;
-            }
-            flock(boids) {
-                this.acceleration.set(0, 0, 0);
-                let alignment = this.alignment(boids);
-                let cohesion = this.cohesion(boids);
-                let separation = this.separation(boids);
-                let bounds = this.bounds();
-                this.acceleration.add(alignment.multiplyScalar(1.0));
-                this.acceleration.add(cohesion.multiplyScalar(1.0));
-                this.acceleration.add(separation.multiplyScalar(1.5));
-                this.acceleration.add(bounds.multiplyScalar(2.0));
-            }
-            update() {
-                this.velocity.add(this.acceleration);
-                this.velocity.clampLength(0, MAX_SPEED);
-                this.position.add(this.velocity);
-                this.mesh.position.copy(this.position);
-                this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.velocity.clone().normalize());
-            }
+            separation(boids) { let steering = new THREE.Vector3(); let total = 0; for (let other of boids) { let d = this.position.distanceTo(other.position); if (other !== this && d < PERCEPTION_RADIUS / 2) { let diff = new THREE.Vector3().subVectors(this.position, other.position); diff.divideScalar(d * d); steering.add(diff); total++; } } if (total > 0) { steering.divideScalar(total); steering.setLength(MAX_SPEED); steering.sub(this.velocity); steering.clampLength(0, MAX_FORCE); } return steering; }
+            alignment(boids) { let steering = new THREE.Vector3(); let total = 0; for (let other of boids) { let d = this.position.distanceTo(other.position); if (other !== this && d < PERCEPTION_RADIUS) { steering.add(other.velocity); total++; } } if (total > 0) { steering.divideScalar(total); steering.setLength(MAX_SPEED); steering.sub(this.velocity); steering.clampLength(0, MAX_FORCE); } return steering; }
+            cohesion(boids) { let steering = new THREE.Vector3(); let total = 0; for (let other of boids) { let d = this.position.distanceTo(other.position); if (other !== this && d < PERCEPTION_RADIUS) { steering.add(other.position); total++; } } if (total > 0) { steering.divideScalar(total); steering.sub(this.position); steering.setLength(MAX_SPEED); steering.sub(this.velocity); steering.clampLength(0, MAX_FORCE); } return steering; }
+            bounds() { const turnForce = 0.1; let steering = new THREE.Vector3(); if (this.position.x > BOID_BOUNDS) steering.x = -turnForce; else if (this.position.x < -BOID_BOUNDS) steering.x = turnForce; if (this.position.y > 120) steering.y = -turnForce; else if (this.position.y < 40) steering.y = turnForce; if (this.position.z > BOID_BOUNDS) steering.z = -turnForce; else if (this.position.z < -BOID_BOUNDS) steering.z = turnForce; return steering; }
+            flock(boids) { this.acceleration.set(0, 0, 0); let alignment = this.alignment(boids); let cohesion = this.cohesion(boids); let separation = this.separation(boids); let bounds = this.bounds(); this.acceleration.add(alignment.multiplyScalar(1.0)); this.acceleration.add(cohesion.multiplyScalar(1.0)); this.acceleration.add(separation.multiplyScalar(1.5)); this.acceleration.add(bounds.multiplyScalar(2.0)); }
+            update() { this.velocity.add(this.acceleration); this.velocity.clampLength(0, MAX_SPEED); this.position.add(this.velocity); this.mesh.position.copy(this.position); this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.velocity.clone().normalize()); }
         }
 
-        function init() {
+        function initializeAR() {
+            mindarThree = new MindARThree({
+                container: document.querySelector("#container"),
+                imageTargetSrc: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/targets.mind",
+            });
+            
+            const { renderer, scene, camera } = mindarThree;
+
             // --- Basic Scene Setup ---
             clock = new THREE.Clock();
-            scene = new THREE.Scene();
-            // In AR, the background is the camera feed, so this color is a fallback.
-            scene.background = new THREE.Color(0x1d2a3b); 
+            
+            // --- Lighting (add to MindAR's scene) ---
+            const ambientLight = new THREE.AmbientLight(0xcccccc, 1.5);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            directionalLight.position.set(1, 1, 0.5); // Position relative to the marker
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 0); // Typical standing height for non-AR view
+            // --- Create an anchor for the marker ---
+            const anchor = mindarThree.addAnchor(0);
+            anchor.group.add(cityGroup); // Add our city to the anchor
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.xr.enabled = true; // Enable WebXR
-            document.body.appendChild(renderer.domElement);
-
-            // --- AR Button and Controller Setup ---
-            const arButton = ARButton.createButton(renderer, { 
-                requiredFeatures: ['hit-test'],
-                optionalFeatures: ['dom-overlay'],
-                domOverlay: { root: document.body }
-            });
-            document.body.appendChild(arButton);
-
-            controller = renderer.xr.getController(0);
-            controller.addEventListener('select', onSelect);
-            scene.add(controller);
-
-            // Reticle for placing the city
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.05, 0.07, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0xffffff })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
+            // Hide the UI until the marker is found
+            anchor.onTargetFound = () => {
+                document.getElementById('ui-panel').style.display = 'block';
+            }
+            anchor.onTargetLost = () => {
+                document.getElementById('ui-panel').style.display = 'none';
+            }
 
             // --- Physics World ---
             world = new CANNON.World();
-            world.gravity.set(0, -9.82, 0); // Use realistic gravity
+            world.gravity.set(0, -9.82, 0);
             world.broadphase = new CANNON.NaiveBroadphase();
             world.solver.iterations = 10;
             world.addContactMaterial(cubeWorldContactMaterial);
 
-            // --- Lighting ---
-            const ambientLight = new THREE.AmbientLight(0xcccccc, 1.5);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
-            directionalLight.position.set(-80, 100, 50);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 4096;
-            directionalLight.shadow.mapSize.height = 4096;
-            const shadowSize = citySize * blockSize * 1.5;
-            directionalLight.shadow.camera.left = -shadowSize;
-            directionalLight.shadow.camera.right = shadowSize;
-            directionalLight.shadow.camera.top = shadowSize;
-            directionalLight.shadow.camera.bottom = -shadowSize;
-            scene.add(directionalLight);
-
             // --- Scene Groups ---
-            cityGroup.add(trafficGroup);
-            cityGroup.add(pedestrianGroup);
-            cityGroup.add(cloudsGroup);
-            cityGroup.add(birdsGroup);
-            scene.add(cityGroup);
+            cityGroup.add(trafficGroup, pedestrianGroup, cloudsGroup, birdsGroup);
             
-            // The city is invisible until placed in AR
-            cityGroup.visible = false;
-            // Scale down the city to a tabletop size
-            cityGroup.scale.set(0.01, 0.01, 0.01);
+            // Scale the city to fit on the marker
+            cityGroup.scale.set(0.1, 0.1, 0.1);
 
             generateCity();
 
             // --- Event Listeners ---
-            window.addEventListener('resize', onWindowResize, false);
-            document.getElementById('generate-btn').addEventListener('click', () => {
-                generateCity();
-                // If already placed, the new city will appear at the same spot.
-            });
+            document.getElementById('generate-btn').addEventListener('click', generateCity);
             document.getElementById('drop-casa-cubes-btn').addEventListener('click', dropCASA_Cubes);
 
-            // Hide UI when entering AR
-            renderer.xr.addEventListener('sessionstart', () => {
-                document.getElementById('ui-panel').style.opacity = '0';
-            });
-            renderer.xr.addEventListener('sessionend', () => {
-                document.getElementById('ui-panel').style.opacity = '1';
+            // Start MindAR
+            mindarThree.start();
+
+            // Attach the render loop
+            renderer.setAnimationLoop(() => {
+                const deltaTime = clock.getDelta();
+                
+                // Run simulations only when the target is visible
+                if (anchor.target.visible) {
+                    world.step(1/60, deltaTime, 3);
+                    physicsObjects.forEach(obj => {
+                        obj.mesh.position.copy(obj.body.position);
+                        obj.mesh.quaternion.copy(obj.body.quaternion);
+                    });
+                    updateTrafficLights(deltaTime);
+                    animateTraffic();
+                    animatePedestrians();
+                    animateClouds();
+                    animateBoids();
+                }
+                
+                renderer.render(scene, camera);
             });
         }
         
-        function onSelect() {
-            // This function is called when the user taps the screen in AR mode.
-            if (reticle.visible) {
-                // Place the city at the reticle's position.
-                cityGroup.position.setFromMatrixPosition(reticle.matrix);
-                cityGroup.visible = true;
-            }
-        }
-
         function clearSceneGroup(group) {
             while(group.children.length > 0) {
                 const object = group.children[0];
@@ -394,60 +276,33 @@
         }
 
         function generateCity() {
-            // Clear previous city elements
-            clearSceneGroup(cityGroup); // Main group for buildings/roads
+            cityGroup.remove(trafficGroup, pedestrianGroup, cloudsGroup, birdsGroup);
             clearSceneGroup(trafficGroup);
             clearSceneGroup(pedestrianGroup);
             clearSceneGroup(cloudsGroup);
             clearSceneGroup(birdsGroup);
-
-            // Clear physics objects
             physicsObjects.forEach(obj => {
-                scene.remove(obj.mesh);
+                cityGroup.remove(obj.mesh);
                 if (obj.mesh.geometry) obj.mesh.geometry.dispose();
                 world.removeBody(obj.body);
             });
             physicsObjects = [];
-            while(world.bodies.length > 0){
-                world.removeBody(world.bodies[0]);
-            }
-
-            // Reset agent arrays
-            cars = [];
-            trafficLights = [];
-            pedestrians = [];
-            clouds = [];
-            boids = [];
-            
-            // Re-add subgroups to the main city group
-            cityGroup.add(trafficGroup);
-            cityGroup.add(pedestrianGroup);
-            cityGroup.add(cloudsGroup);
-            cityGroup.add(birdsGroup);
-
-            // Physics ground plane for the city model itself
-            const groundBody = new CANNON.Body({
-                mass: 0,
-                shape: new CANNON.Plane(),
-                material: worldPhysicsMaterial
-            });
+            while(world.bodies.length > 0){ world.removeBody(world.bodies[0]); }
+            cars = []; trafficLights = []; pedestrians = []; clouds = []; boids = [];
+            cityGroup.add(trafficGroup, pedestrianGroup, cloudsGroup, birdsGroup);
+            const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: worldPhysicsMaterial });
             groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
             world.addBody(groundBody);
-
-            // Generate city layout
             for (let i = 0; i <= citySize; i++) {
                 for (let j = 0; j <= citySize; j++) {
                     const x = cityOffset + i * totalBlockSize;
                     const z = cityOffset + j * totalBlockSize;
-
                     if (i < citySize && j < citySize) createCityBlock(x, z, i, j);
                     if (i < citySize) createRoadSegment(new THREE.Vector3(x - roadWidth/2, 0.01, z + blockSize/2), false, blockSize);
                     if (j < citySize) createRoadSegment(new THREE.Vector3(x + blockSize/2, 0.01, z - roadWidth/2), true, blockSize);
                     if (i < citySize && j < citySize) createIntersection(x, z, i, j);
                 }
             }
-
-            // Populate the city
             generateTraffic();
             generatePedestrians();
             generateClouds();
@@ -465,30 +320,22 @@
             curb.position.set(x + blockSize/2, 0.08, z + blockSize/2);
             curb.receiveShadow = true;
             cityGroup.add(curb);
-
             const buildingCount = Math.floor(2 + Math.random() * 4);
-            for(let i = 0; i < buildingCount; i++) {
-                createBuilding(x + (Math.random() * (blockSize - 6)) + 3, z + (Math.random() * (blockSize - 6)) + 3);
-            }
-
+            for(let i = 0; i < buildingCount; i++) { createBuilding(x + (Math.random() * (blockSize - 6)) + 3, z + (Math.random() * (blockSize - 6)) + 3); }
             const treeCount = Math.floor(3 + Math.random() * 5);
-            for(let i = 0; i < treeCount; i++) {
-                createTree(x + (Math.random() * (blockSize - 2)) + 1, z + (Math.random() * (blockSize - 2)) + 1, 0.2);
-            }
+            for(let i = 0; i < treeCount; i++) { createTree(x + (Math.random() * (blockSize - 2)) + 1, z + (Math.random() * (blockSize - 2)) + 1, 0.2); }
         }
 
         function createBuilding(x, z) {
             const height = 10 + Math.random() * 30;
             const width = 5;
             const depth = 5;
-
             const buildingGeo = new THREE.BoxGeometry(width, height, depth);
             const buildingMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.7,0.7,0.7).multiplyScalar(0.8 + Math.random()*0.2) });
             const building = new THREE.Mesh(buildingGeo, buildingMat);
             building.position.set(x, height/2 + 0.2, z);
             building.castShadow = true;
             cityGroup.add(building);
-
             const buildingShape = new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2));
             const buildingBody = new CANNON.Body({ mass: 0, shape: buildingShape, material: worldPhysicsMaterial });
             buildingBody.position.set(x, height/2 + 0.2, z);
@@ -496,50 +343,35 @@
         }
 
         function dropCASA_Cubes() {
-            if (!cityGroup.visible) return; // Can't drop if city isn't placed
-
             const countInput = document.getElementById('cube-count');
             const count = parseInt(countInput.value);
             if (isNaN(count) || count <= 0) return;
-
             const gridDim = Math.ceil(Math.sqrt(count));
             const cityWidth = citySize * totalBlockSize;
             const spacing = cityWidth / (gridDim + 1);
             let droppedCount = 0;
-
             for (let i = 0; i < gridDim; i++) {
                 for (let j = 0; j < gridDim; j++) {
                     if (droppedCount >= count) break;
-
-                    const cubeWidth = 4;
-                    const cubeHeight = 5;
-                    const cubeDepth = 4;
+                    const cubeWidth = 4; const cubeHeight = 5; const cubeDepth = 4;
                     const cubeGeo = new THREE.BoxGeometry(cubeWidth, cubeHeight, cubeDepth);
                     const cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
                     cubeMesh.castShadow = true;
-
                     const cubeShape = new CANNON.Box(new CANNON.Vec3(cubeWidth/2, cubeHeight/2, cubeDepth/2));
                     const cubeBody = new CANNON.Body({ mass: 5, shape: cubeShape, material: cubePhysicsMaterial });
-
                     const x = cityOffset + (i + 1) * spacing;
                     const z = cityOffset + (j + 1) * spacing;
-                    
-                    // Drop from above the city model
                     cubeBody.position.set(x, 150, z);
                     cubeMesh.position.copy(cubeBody.position);
-
                     world.addBody(cubeBody);
-                    // Add the cube to the cityGroup so it's positioned correctly in AR
                     cityGroup.add(cubeMesh); 
                     physicsObjects.push({ mesh: cubeMesh, body: cubeBody });
-
                     droppedCount++;
                 }
                 if (droppedCount >= count) break;
             }
         }
         
-        // --- All other generation and animation functions (unchanged) ---
         function createCloud() { const cloud = new THREE.Group(); const puffGeo = new THREE.SphereGeometry(5, 4, 4); for (let i = 0; i < 5 + Math.random() * 5; i++) { const puff = new THREE.Mesh(puffGeo, cloudMat); puff.position.set((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 10); puff.scale.setScalar(0.8 + Math.random() * 0.4); cloud.add(puff); } cloud.castShadow = true; return cloud; }
         function generateClouds() { const numClouds = 25; const cityWidth = citySize * totalBlockSize; for (let i = 0; i < numClouds; i++) { const cloudMesh = createCloud(); cloudMesh.position.set((Math.random() - 0.5) * cityWidth * 2, 100 + Math.random() * 20, (Math.random() - 0.5) * cityWidth * 2); clouds.push({ mesh: cloudMesh, speed: 0.02 + Math.random() * 0.03 }); cloudsGroup.add(cloudMesh); } }
         function generateBoids() { for (let i = 0; i < BOID_COUNT; i++) { boids.push(new Boid()); } }
@@ -557,70 +389,11 @@
         function createCar(){ const carColors = [0xc0392b, 0x2980b9, 0xf1c40f, 0xecf0f1, 0x2c3e50]; const carGeo = new THREE.BoxGeometry(1.5, 1, 3); const carMat = new THREE.MeshStandardMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)], metalness: 0.5, roughness: 0.5 }); const car = new THREE.Mesh(carGeo, carMat); car.castShadow = true; return car; }
         function updateTrafficLights(deltaTime){ for (let i = 0; i < citySize; i++) { for (let j = 0; j < citySize; j++) { const light = trafficLights[i]?.[j]; if (!light) continue; light.timer += deltaTime; if (light.timer > light.cycleTime) { light.timer = 0; light.state = light.state === 'NS' ? 'EW' : 'NS'; } light.lights.nsGreen.material = light.state === 'NS' ? greenLightOnMat : greenLightOffMat; light.lights.nsRed.material = light.state !== 'NS' ? redLightOnMat : redLightOffMat; light.lights.ewGreen.material = light.state === 'EW' ? greenLightOnMat : greenLightOffMat; light.lights.ewRed.material = light.state !== 'EW' ? redLightOnMat : redLightOffMat; } } }
         function animateTraffic(){ const cityLimit = citySize * totalBlockSize / 2 + 10; const safetyDistance = 5; cars.forEach(carObj => { const car = carObj.mesh; carObj.speed = carObj.baseSpeed; let carInFront = false; for (const otherCarObj of cars) { if (car === otherCarObj.mesh) continue; if (carObj.direction === otherCarObj.direction) { const pos = car.position; const otherPos = otherCarObj.mesh.position; let distance; if (carObj.direction === 'x') { if (Math.abs(pos.z - otherPos.z) < 1 && otherPos.x > pos.x) { distance = otherPos.x - pos.x; if (distance > 0 && distance < safetyDistance) carInFront = true; } } else { if (Math.abs(pos.x - otherPos.x) < 1 && otherPos.z > pos.z) { distance = otherPos.z - pos.z; if (distance > 0 && distance < safetyDistance) carInFront = true; } } } } if (carInFront) carObj.speed = 0; const stopDistance = 6; const gridI = Math.floor((car.position.x - cityOffset + totalBlockSize) / totalBlockSize); const gridJ = Math.floor((car.position.z - cityOffset + totalBlockSize) / totalBlockSize); const light = trafficLights[gridI]?.[gridJ]; if (light) { const intersectionX = cityOffset + gridI * totalBlockSize - roadWidth; const intersectionZ = cityOffset + gridJ * totalBlockSize - roadWidth; if (carObj.direction === 'z' && light.state === 'EW' && Math.abs(car.position.z - intersectionZ) < stopDistance && car.position.z < intersectionZ) { carObj.speed = 0; } else if (carObj.direction === 'x' && light.state === 'NS' && Math.abs(car.position.x - intersectionX) < stopDistance && car.position.x < intersectionX) { carObj.speed = 0; } } if (carObj.direction === 'x') { car.position.x += carObj.speed; if (car.position.x > cityLimit) car.position.x = -cityLimit; } else { car.position.z += carObj.speed; if (car.position.z > cityLimit) car.position.z = -cityLimit; } }); }
-        
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
 
-        // --- Main Render Loop ---
-        function render(timestamp, frame) {
-            const deltaTime = clock.getDelta();
-
-            // --- AR Hit-Test Logic ---
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
-
-                if (hitTestSourceRequested === false) {
-                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
-                            hitTestSource = source;
-                        });
-                    });
-                    session.addEventListener('end', () => {
-                        hitTestSourceRequested = false;
-                        hitTestSource = null;
-                    });
-                    hitTestSourceRequested = true;
-                }
-
-                if (hitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    if (hitTestResults.length) {
-                        const hit = hitTestResults[0];
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                    } else {
-                        reticle.visible = false;
-                    }
-                }
-            }
-
-            // --- Simulation Logic ---
-            // Only run simulations if the city is visible
-            if (cityGroup.visible) {
-                world.step(1/60, deltaTime, 3);
-
-                physicsObjects.forEach(obj => {
-                    obj.mesh.position.copy(obj.body.position);
-                    obj.mesh.quaternion.copy(obj.body.quaternion);
-                });
-
-                updateTrafficLights(deltaTime);
-                animateTraffic();
-                animatePedestrians();
-                animateClouds();
-                animateBoids();
-            }
-            
-            renderer.render(scene, camera);
-        }
-
-        init();
-        // Use setAnimationLoop for WebXR projects
-        renderer.setAnimationLoop(render);
+        // Start the experience
+        document.addEventListener("DOMContentLoaded", () => {
+          initializeAR();
+        });
 
     </script>
 </body>
