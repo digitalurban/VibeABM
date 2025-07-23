@@ -113,7 +113,7 @@ A 3D implementation of Craig Reynolds' classic "Boids" algorithm, demonstrating 
 
 ![Forest Fire Demo](https://github.com/digitalurban/VibeABM/blob/main/images/fire.png)
 
-**✨ [View Live Demo: `fire.html`](https://digitalurban.github.io/VibeABM/foresetfire.html)**
+**✨ [View Live Demo: `fire.html`](https://digitalurban.github.io/VibeABM/forestfire.html)**
 
 This is a classic cellular automaton model that simulates the spread of a forest fire. In this type of ABM, the "agents" are the individual cells of the grid, each with a simple set of states and rules. The simulation powerfully demonstrates the concept of a percolation threshold.
 
@@ -127,6 +127,7 @@ This is a classic cellular automaton model that simulates the spread of a forest
 
 * **Percolation Threshold:** The simulation's outcome is highly sensitive to the initial tree density. Below a critical threshold (around 59% density), the fire will almost always burn out quickly. Above this threshold, the fire has a high probability of "percolating" across the entire forest. The sliders allow you to experiment with this threshold and observe the dramatic shift in outcomes.
 
+---
 
 ### 7. Space Invaders Clock - (Created with Gemini 2.5 Pro)
 
