@@ -1,4 +1,4 @@
-# A Collection of Vibe Coded Agent-Based Model Simulations
+# A Collection of Vibe Coded Large Language Models Agent-Based Model Simulations
 
 This repository hosts a series of interactive web-based simulations exploring different forms of Agent Based Models (ABMs). Each simulation is self-contained in a single HTML file and uses JavaScript and Three.js to render dynamic systems where autonomous agents interact with each other and their environment based on a set of rules.
 
