@@ -6,12 +6,7 @@
     <title>Procedural City - A-Frame</title>
     <style>
         body, html { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000; }
-        #ar-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            overflow: hidden;
-        }
+        /* No container div needed for fullscreen AR */
         #ui-panel {
             position: absolute;
             top: 20px;
@@ -86,40 +81,39 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 </head>
 <body>
-    <div id="ar-container">
-        <!-- UI Panel -->
-        <div id="ui-panel">
-            <h1>Procedural City AR</h1>
-            <button id="generate-btn">Generate New City</button>
-            <button id="drop-casa-cubes-btn" class="secondary-button">Drop CASA Cubes</button>
-            <div class="input-group">
-                <label for="cube-count">Number of Cubes:</label>
-                <input type="number" id="cube-count" value="64" min="1" max="100">
-            </div>
+    <!-- UI Panel -->
+    <div id="ui-panel">
+        <h1>Procedural City AR</h1>
+        <button id="generate-btn">Generate New City</button>
+        <button id="drop-casa-cubes-btn" class="secondary-button">Drop CASA Cubes</button>
+        <div class="input-group">
+            <label for="cube-count">Number of Cubes:</label>
+            <input type="number" id="cube-count" value="64" min="1" max="100">
         </div>
-
-        <!-- A-Frame Scene -->
-        <a-scene embedded arjs='sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;' renderer="colorManagement: true;">
-            
-            <!-- Lighting -->
-            <a-light type="ambient" color="#CCC" intensity="1.5"></a-light>
-            <a-light type="directional" color="#FFF" intensity="2.0" position="-1 1 0.5"></a-light>
-
-            <!-- Custom Image Marker -->
-            <a-marker type='pattern' url='https://raw.githack.com/digitalurban/VibeABM/main/images/casa_logo.jpg' id='casa-marker'>
-                <!-- Entity that will hold the procedural city -->
-                <a-entity
-                    id="city-container"
-                    procedural-city
-                    scale="0.1 0.1 0.1"
-                    position="0 -0.5 0">
-                </a-entity>
-            </a-marker>
-
-            <!-- Camera -->
-            <a-entity camera></a-entity>
-        </a-scene>
     </div>
+
+    <!-- A-Frame Scene for fullscreen AR -->
+    <!-- Key changes: Removed 'embedded' from arjs properties and removed the renderer property for stability. -->
+    <a-scene arjs='sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;'>
+        
+        <!-- Lighting -->
+        <a-light type="ambient" color="#CCC" intensity="1.5"></a-light>
+        <a-light type="directional" color="#FFF" intensity="2.0" position="-1 1 0.5"></a-light>
+
+        <!-- Custom Image Marker -->
+        <a-marker type='pattern' url='https://raw.githack.com/digitalurban/VibeABM/main/images/casa_logo.jpg' id='casa-marker'>
+            <!-- Entity that will hold the procedural city -->
+            <a-entity
+                id="city-container"
+                procedural-city
+                scale="0.1 0.1 0.1"
+                position="0 -0.5 0">
+            </a-entity>
+        </a-marker>
+
+        <!-- Camera -->
+        <a-entity camera></a-entity>
+    </a-scene>
 
     <script>
     AFRAME.registerComponent('procedural-city', {
