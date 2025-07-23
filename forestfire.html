@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forest Fire Simulation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #111;
+            color: #fff;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #simulationContainer {
+            display: flex;
+            flex-wrap: nowrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 20px;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+        }
+        canvas#simulationCanvas {
+            border: 1px solid #444;
+            background-color: #222; /* Soil color */
+        }
+        .ui-panel {
+            background-color: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            width: 350px;
+            flex-shrink: 0;
+        }
+        .ui-panel h1 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #ff6b35; /* Fire orange */
+        }
+        .stats p, .controls .control-group {
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .stats span {
+            color: #ff6b35;
+            font-weight: bold;
+            float: right;
+        }
+        .controls label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .controls input[type="range"] {
+            width: 100%;
+        }
+        .controls button {
+            width: 100%;
+            padding: 10px;
+            background-color: #ff6b35;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .controls button:hover {
+            background-color: #f77f50;
+        }
+    </style>
+</head>
+<body>
+    <div id="simulationContainer">
+        <canvas id="simulationCanvas"></canvas>
+        <div class="ui-panel">
+            <h1>Forest Fire Model</h1>
+             <p style="font-size:14px; line-height: 1.5;">
+                A classic cellular automaton model. Fire starts on the left and spreads to adjacent trees. The fire's ability to cross the forest depends critically on the initial tree density.
+            </p>
+            <div class="stats">
+                <p>Time: <span id="time-display">0</span></p>
+                <p>Trees Burned: <span id="burned-display">0%</span></p>
+            </div>
+             <div class="controls">
+                <div class="control-group">
+                    <label for="density-slider">Tree Density: <span id="density-value">59%</span></label>
+                    <input type="range" id="density-slider" min="0" max="100" value="59">
+                </div>
+                <div class="control-group">
+                    <label for="speed-slider">Speed: <span id="speed-value">10</span></label>
+                    <input type="range" id="speed-slider" min="1" max="20" value="10">
+                </div>
+                <button id="restart-button">Start New Fire</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- UI Elements ---
+            const densitySlider = document.getElementById('density-slider');
+            const speedSlider = document.getElementById('speed-slider');
+            const restartButton = document.getElementById('restart-button');
+            const timeDisplay = document.getElementById('time-display');
+            const burnedDisplay = document.getElementById('burned-display');
+            const densityValue = document.getElementById('density-value');
+            const speedValue = document.getElementById('speed-value');
+            const canvas = document.getElementById('simulationCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // --- Simulation Configuration ---
+            const config = {
+                gridSize: 150,
+                cellSize: 4,
+                density: 0.59,
+                simulationSpeed: 10 // Frames per tick
+            };
+            
+            // --- State Constants ---
+            const EMPTY = 0;
+            const TREE = 1;
+            const BURNING = 2;
+            const BURNT = 3;
+
+            // --- Color Palettes for a more natural look ---
+            const FIRE_PALETTE = ['#e76f51', '#f4a261', '#e63946'];
+            const TREE_PALETTE = ['#228B22', '#006400', '#556B2F']; // ForestGreen, DarkGreen, DarkOliveGreen
+            const SOIL_PALETTE = ['#5a3d2b', '#6f4f28', '#8B4513']; // Dark brown, medium brown, saddle brown
+            const BURNT_COLOR = '#264653';
+
+            let forestGrid = [];
+            let time = 0;
+            let totalTrees = 0;
+            let frameCount = 0;
+            let animationFrameId;
+            let isRunning = false;
+
+            // --- Core Simulation Logic ---
+
+            // Sets up the initial state of the forest
+            function setup() {
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                
+                canvas.width = config.gridSize * config.cellSize;
+                canvas.height = config.gridSize * config.cellSize;
+                
+                time = 0;
+                frameCount = 0;
+                totalTrees = 0;
+                forestGrid = [];
+                
+                // Create the forest based on density
+                for (let y = 0; y < config.gridSize; y++) {
+                    forestGrid[y] = [];
+                    for (let x = 0; x < config.gridSize; x++) {
+                        let state, color;
+                        if (Math.random() < config.density) {
+                            state = TREE;
+                            color = TREE_PALETTE[Math.floor(Math.random() * TREE_PALETTE.length)];
+                            totalTrees++;
+                        } else {
+                            state = EMPTY;
+                            color = SOIL_PALETTE[Math.floor(Math.random() * SOIL_PALETTE.length)];
+                        }
+                        forestGrid[y][x] = { state, color };
+                    }
+                }
+
+                // Start the fire on the left edge
+                for (let y = 0; y < config.gridSize; y++) {
+                    if (forestGrid[y][0].state === TREE) {
+                        forestGrid[y][0].state = BURNING;
+                    }
+                }
+                
+                isRunning = true;
+                animate();
+            }
+
+            // A single step of the simulation
+            function tick() {
+                let burningCount = 0;
+                const nextGrid = forestGrid.map(row => row.map(cell => ({ ...cell })));
+
+                for (let y = 0; y < config.gridSize; y++) {
+                    for (let x = 0; x < config.gridSize; x++) {
+                        const cellState = forestGrid[y][x].state;
+
+                        if (cellState === BURNING) {
+                            nextGrid[y][x].state = BURNT;
+                        } else if (cellState === TREE) {
+                            // Check neighbors for fire
+                            if (
+                                (y > 0 && forestGrid[y - 1][x].state === BURNING) || // North
+                                (y < config.gridSize - 1 && forestGrid[y + 1][x].state === BURNING) || // South
+                                (x > 0 && forestGrid[y][x - 1].state === BURNING) || // West
+                                (x < config.gridSize - 1 && forestGrid[y][x + 1].state === BURNING)    // East
+                            ) {
+                                nextGrid[y][x].state = BURNING;
+                            }
+                        }
+                        
+                        if(nextGrid[y][x].state === BURNING) {
+                            burningCount++;
+                        }
+                    }
+                }
+
+                forestGrid = nextGrid;
+                
+                if (burningCount === 0) {
+                    isRunning = false; // Stop the simulation if nothing is burning
+                }
+            }
+
+            // --- Drawing and UI ---
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let burntCount = 0;
+                for (let y = 0; y < config.gridSize; y++) {
+                    for (let x = 0; x < config.gridSize; x++) {
+                        const cell = forestGrid[y][x];
+                        switch(cell.state) {
+                            case BURNING:
+                                ctx.fillStyle = FIRE_PALETTE[Math.floor(Math.random() * FIRE_PALETTE.length)];
+                                break;
+                            case BURNT:
+                                ctx.fillStyle = BURNT_COLOR;
+                                burntCount++;
+                                break;
+                            case TREE:
+                            case EMPTY:
+                                ctx.fillStyle = cell.color;
+                                break;
+                        }
+                        ctx.fillRect(x * config.cellSize, y * config.cellSize, config.cellSize, config.cellSize);
+                    }
+                }
+                updateUI(burntCount);
+            }
+
+            function updateUI(burntCount) {
+                timeDisplay.textContent = time;
+                const percentBurned = totalTrees > 0 ? ((burntCount / totalTrees) * 100).toFixed(0) : 0;
+                burnedDisplay.textContent = `${percentBurned}%`;
+            }
+
+            // --- Main Animation Loop ---
+            function animate() {
+                if (!isRunning) {
+                    draw(); // Final draw to show the end state
+                    return;
+                }
+                
+                frameCount++;
+                if (frameCount >= config.simulationSpeed) {
+                    frameCount = 0;
+                    time++;
+                    tick();
+                }
+                
+                draw();
+                
+                animationFrameId = requestAnimationFrame(animate);
+            }
+            
+            // --- Event Listeners ---
+            function updateFromUI() {
+                config.density = parseInt(densitySlider.value) / 100;
+                densityValue.textContent = `${densitySlider.value}%`;
+                
+                // Invert slider value for intuitive speed control (higher is slower)
+                config.simulationSpeed = 21 - parseInt(speedSlider.value);
+                speedValue.textContent = speedSlider.value;
+            }
+            densitySlider.addEventListener('input', updateFromUI);
+            speedSlider.addEventListener('input', updateFromUI);
+            restartButton.addEventListener('click', setup);
+
+            // --- Start ---
+            updateFromUI();
+            setup();
+        });
+    </script>
+</body>
+</html>
