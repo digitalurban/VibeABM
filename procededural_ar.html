@@ -99,14 +99,14 @@
         </div>
 
         <!-- A-Frame Scene -->
-        <a-scene embedded arjs='sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;'>
+        <a-scene embedded arjs='sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;' renderer="colorManagement: true;">
             
             <!-- Lighting -->
             <a-light type="ambient" color="#CCC" intensity="1.5"></a-light>
             <a-light type="directional" color="#FFF" intensity="2.0" position="-1 1 0.5"></a-light>
 
             <!-- Custom Image Marker -->
-            <a-marker type='pattern' url='https://raw.githubusercontent.com/digitalurban/VibeABM/main/images/casa_logo.jpg' id='casa-marker'>
+            <a-marker type='pattern' url='https://raw.githack.com/digitalurban/VibeABM/main/images/casa_logo.jpg' id='casa-marker'>
                 <!-- Entity that will hold the procedural city -->
                 <a-entity
                     id="city-container"
